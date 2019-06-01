@@ -17,7 +17,8 @@ let nRuns = 2000
 let nTimeStepsPerRun = 1000
 
 // greedy strategy
-func getMaxActionValueEstimateIndex(avEstimate: [Int: Float]) -> Int {
+func getMaxActionValueEstimateIndex(avEstimate: [Int: Double]) -> Int {
+    //print("avEstimate: \(avEstimate)")
     let maxVal = avEstimate.values.max()
     let optimalActions = avEstimate.filter { $0.value == maxVal }
     let optimalActionIndices = Array(optimalActions.keys)
@@ -25,25 +26,17 @@ func getMaxActionValueEstimateIndex(avEstimate: [Int: Float]) -> Int {
 }
 
 // random strategy
-func getRandomActionIndex(avEstimate: [Int: Float]) -> Int {
+func getRandomActionIndex(avEstimate: [Int: Double]) -> Int {
     return Array(avEstimate.keys).randomElement()!
 }
 
 // epsilon-greedy strategy
-func getEpsilonGreedyIndex(avEstimate: [Int: Float], epsilon: Double) -> Int {
+func getEpsilonGreedyIndex(avEstimate: [Int: Double], epsilon: Double) -> Int {
     let d = Double.random(in: 0...1)
     if d <= epsilon {
         return getRandomActionIndex(avEstimate: avEstimate)
     }
     return getMaxActionValueEstimateIndex(avEstimate: avEstimate)
-}
-
-func getEpsilonGreedyIndex1(avEstimate: [Int: Float]) -> Int {
-    return getEpsilonGreedyIndex(avEstimate: avEstimate, epsilon: 0.1)
-}
-
-func getEpsilonGreedyIndex2(avEstimate: [Int: Float]) -> Int {
-    return getEpsilonGreedyIndex(avEstimate: avEstimate, epsilon: 0.01)
 }
 
 class ActionTracker {
@@ -59,7 +52,7 @@ class ActionTracker {
     // We need to keep track of the estimated value of each action.
     // Here, we use the sample average estimate.
     // These are reset at every run.
-    var actionValueEstimate: [Int: Float] = [:]
+    var actionValueEstimate: [Int: Double] = [:]
     var actionCounter: [Int: Int] = [:]
 
     func computeAverageReward() {
@@ -82,108 +75,115 @@ class ActionTracker {
     }
 }
 
-func completeRun(priorActionTracker: ActionTracker,
+func simulate(actionTracker: ActionTracker,
                  iRun: Int,
-                 strategy: ([Int: Float]) -> Int,
-                 testbed: TenArmedTestbed) -> ActionTracker {
-    let actionTracker = priorActionTracker
+                 epsilon: Double,
+                 testbed: TenArmedTestbed,
+                 initialActionValueEstimate: Double,
+                 stepSize: Double) {
     actionTracker.optimalAction[iRun] = testbed.indicesOfOptimalAction
 
     // initialize
     for i in 0...testbed.arms.count-1 {
-        actionTracker.actionValueEstimate[i] = 0
+        actionTracker.actionValueEstimate[i] = initialActionValueEstimate
         actionTracker.actionCounter[i] = 0
     }
 
     for iTimeStep in 0...nTimeStepsPerRun-1 {
         // determine next action
-        let actionIndex = strategy(actionTracker.actionValueEstimate)
+        //let actionIndex = strategy(actionTracker.actionValueEstimate)
+        let actionIndex = getEpsilonGreedyIndex(avEstimate: actionTracker.actionValueEstimate, epsilon: epsilon)
+        //print("actionIndex: \(actionIndex)")
         actionTracker.actionTaken[iTimeStep][iRun] = actionIndex
         actionTracker.actionCounter[actionIndex]! += 1
 
-        let reward = testbed.arms[actionIndex].nextFloat()
+        let reward = Double(testbed.arms[actionIndex].nextFloat())
+        //print("reward \(reward)")
         actionTracker.allRewards[iTimeStep][iRun] = Double(reward)
 
         let currentActionValue = actionTracker.actionValueEstimate[actionIndex]!
-        let nextActionValue = currentActionValue + 1 / Float(actionTracker.actionCounter[actionIndex]!) * (reward - currentActionValue)
+        //print("currentActionValue: \(currentActionValue)")
+
+        let theStepSize = stepSize > 0 ? stepSize : 1 / Double(actionTracker.actionCounter[actionIndex]!)
+        let nextActionValue = currentActionValue + theStepSize * (reward - currentActionValue)
         // update action value estimate
+        //print("nextActionValue: \(nextActionValue)")
         actionTracker.actionValueEstimate[actionIndex] = nextActionValue
     }
-
-    return actionTracker
 }
 
-var greedyActionTracker = ActionTracker()
-var epsilonGreedy1ActionTracker = ActionTracker()
-var epsilonGreedy2ActionTracker = ActionTracker()
+func simulateAll(actionTrackers: [ActionTracker], epsilons: [Double],
+                 initialActionValueEstimates: [Double],
+                 stepSize: Double = -1.0) {
+    for iRun in 0...nRuns-1 {
+        let testbed = TenArmedTestbed()
 
-for iRun in 0...nRuns-1 {
-    let testbed = TenArmedTestbed()
-    //testbed.printStats()
-
-    greedyActionTracker = completeRun(
-        priorActionTracker: greedyActionTracker,
-        iRun: iRun,
-        strategy: getMaxActionValueEstimateIndex,
-        testbed: testbed)
-
-    epsilonGreedy1ActionTracker = completeRun(
-        priorActionTracker: epsilonGreedy1ActionTracker,
-        iRun: iRun,
-        strategy: getEpsilonGreedyIndex1,
-        testbed: testbed)
-
-    epsilonGreedy2ActionTracker = completeRun(
-        priorActionTracker: epsilonGreedy2ActionTracker,
-        iRun: iRun,
-        strategy: getEpsilonGreedyIndex2,
-        testbed: testbed)
-
-    //for (key,value) in actionValueEstimate {
-    //    print("\(key) : \(value)")
-    //}
+        for ((actionTracker, epsilon), initialActionValueEstimate) in zip(zip(actionTrackers, epsilons), initialActionValueEstimates) {
+            simulate(actionTracker: actionTracker, iRun: iRun, epsilon: epsilon, testbed: testbed,
+                     initialActionValueEstimate: initialActionValueEstimate, stepSize: stepSize)
+        }
+    }
+    for actionTracker in actionTrackers {
+        actionTracker.computeAverageReward()
+        actionTracker.computeAverageOptimal()
+    }
 }
 
-// print(allRewards)
-greedyActionTracker.computeAverageReward()
-epsilonGreedy1ActionTracker.computeAverageReward()
-epsilonGreedy2ActionTracker.computeAverageReward()
+func make_figure_2_2() {
+    let greedyActionTracker = ActionTracker()
+    let epsilonGreedy1ActionTracker = ActionTracker()
+    let epsilonGreedy2ActionTracker = ActionTracker()
 
-greedyActionTracker.computeAverageOptimal()
-epsilonGreedy1ActionTracker.computeAverageOptimal()
-epsilonGreedy2ActionTracker.computeAverageOptimal()
+    let actionTrackers = [greedyActionTracker, epsilonGreedy1ActionTracker, epsilonGreedy2ActionTracker]
+    let epsilons = [0, 0.1, 0.01]
+    let initialActionValueEstimates = [0.0, 0.0, 0.0]
+    simulateAll(actionTrackers: actionTrackers, epsilons: epsilons, initialActionValueEstimates: initialActionValueEstimates)
 
-print("Greedy Action Average Rewards")
-print(greedyActionTracker.averageRewards.suffix(10))
-print("epsilon=0.1 Greedy Action Average Rewards")
-print(epsilonGreedy1ActionTracker.averageRewards.suffix(10))
-print("epsilon=0.01 Greedy Action Average Rewards")
-print(epsilonGreedy2ActionTracker.averageRewards.suffix(10))
+    let _ = plt.figure(figsize: [10, 10])
 
-let fig = plt.figure(figsize: [10, 10])
+    plt.subplot(2, 1, 1)
+    let labels = ["eps=0", "eps=0.1", "eps=0.01"]
+    for (actionTracker, label) in zip(actionTrackers, labels) {
+        plt.plot(Array(1...nTimeStepsPerRun), actionTracker.averageRewards, label: label)
+    }
+    plt.xlabel("Steps")
+    plt.ylabel("Average reward")
+    plt.legend()
 
-plt.subplot(2, 1, 1)
-plt.plot(Array(1...nTimeStepsPerRun), greedyActionTracker.averageRewards, label: "eps=0")
-plt.plot(Array(1...nTimeStepsPerRun), epsilonGreedy1ActionTracker.averageRewards, label: "eps=0.1")
-plt.plot(Array(1...nTimeStepsPerRun), epsilonGreedy2ActionTracker.averageRewards, label: "eps=0.01")
-plt.xlabel("Steps")
-plt.ylabel("Average reward")
-plt.legend()
+    plt.subplot(2, 1, 2)
+    for (actionTracker, label) in zip(actionTrackers, labels) {
+        plt.plot(Array(1...nTimeStepsPerRun), actionTracker.averageOptimal, label: label)
+    }
+    plt.xlabel("Steps")
+    plt.ylabel("% Optimal award")
+    plt.legend()
 
-print("Greedy Action Optimal Fraction")
-print(greedyActionTracker.averageOptimal.suffix(10))
-print("epsilon=0.1 Greedy Action Optimal Fraction")
-print(epsilonGreedy1ActionTracker.averageOptimal.suffix(10))
-print("epsilon=0.01 Greedy Action Optimal Fraction")
-print(epsilonGreedy2ActionTracker.averageOptimal.suffix(10))
+    plt.savefig("Fig_2.2.png")
+}
 
-plt.subplot(2, 1, 2)
-plt.plot(Array(1...nTimeStepsPerRun), greedyActionTracker.averageOptimal, label: "eps=0")
-plt.plot(Array(1...nTimeStepsPerRun), epsilonGreedy1ActionTracker.averageOptimal, label: "eps=0.1")
-plt.plot(Array(1...nTimeStepsPerRun), epsilonGreedy2ActionTracker.averageOptimal, label: "eps=0.01")
-plt.xlabel("Steps")
-plt.ylabel("% Optimal award")
-plt.legend()
+func make_figure_2_3() {
+    let epsilonGreedy1ActionConstantStepTracker = ActionTracker()
+    let optimisticGreedyActionConstantStepTracker = ActionTracker()
+
+    let actionTrackers = [epsilonGreedy1ActionConstantStepTracker, optimisticGreedyActionConstantStepTracker]
+    let epsilons = [0.1, 0]
+    let stepSize = 0.1
+    let initialActionValueEstimates = [0.0, 5.0]
+    simulateAll(actionTrackers: actionTrackers, epsilons: epsilons,
+                initialActionValueEstimates: initialActionValueEstimates,
+                stepSize: stepSize)
+
+    let _ = plt.figure(figsize: [6.4, 4.8])
+
+    plt.plot(Array(1...nTimeStepsPerRun), actionTrackers[0].averageOptimal, label: "Q1=0, eps=0.1")
+    plt.plot(Array(1...nTimeStepsPerRun), actionTrackers[1].averageOptimal, label: "Q1=5, eps=0")
+    plt.xlabel("Steps")
+    plt.ylabel("% Optimal award")
+    plt.legend()
+
+    plt.savefig("Fig_2.3.png")
+}
 
 
-plt.savefig("Fig_2.2.png")
+make_figure_2_2()
+make_figure_2_3()
