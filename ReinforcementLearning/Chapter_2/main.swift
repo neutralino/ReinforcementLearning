@@ -6,7 +6,7 @@
 //  Copyright © 2019 Don Teo. All rights reserved.
 //
 
-// import Foundation
+import Foundation
 import Python
 PythonLibrary.useVersion(2)  // stuck with the System python for now. (i.e. /usr/bin/python -m pip)
 //import TensorFlow
@@ -37,6 +37,30 @@ func getEpsilonGreedyIndex(avEstimate: [Int: Double], epsilon: Double) -> Int {
         return getRandomActionIndex(avEstimate: avEstimate)
     }
     return getMaxActionValueEstimateIndex(avEstimate: avEstimate)
+}
+
+// upper-confidence-bound strategy
+func getUCBActionIndex(avEstimate: [Int: Double], actionCounter: [Int: Int], iTimeStep: Int, c: Double) -> Int {
+    //if there are any actions that have yet to be taken, these are maximizing actions
+    let optimalActions = actionCounter.filter { $0.value == 0 }
+    if optimalActions.count > 0 {
+        let optimalActionIndices = Array(optimalActions.keys)
+        return optimalActionIndices.randomElement()!
+    }
+
+    var ucbAvEstimate = [Int: Double]()
+    for index in avEstimate.keys {
+        ucbAvEstimate[index] = avEstimate[index]! + c * sqrt(log(Double(iTimeStep)) / Double(actionCounter[index]!))
+    }
+    return getMaxActionValueEstimateIndex(avEstimate: ucbAvEstimate)
+}
+
+func getStrategyIndex(avEstimate: [Int: Double], epsilon: Double, c: Double,
+                           actionCounter: [Int: Int], iTimeStep: Int) -> Int {
+    if c > 0 {
+        return getUCBActionIndex(avEstimate: avEstimate, actionCounter: actionCounter, iTimeStep: iTimeStep, c: c)
+    }
+    return getEpsilonGreedyIndex(avEstimate: avEstimate, epsilon: epsilon)
 }
 
 class ActionTracker {
@@ -78,6 +102,7 @@ class ActionTracker {
 func simulate(actionTracker: ActionTracker,
                  iRun: Int,
                  epsilon: Double,
+                 c: Double,
                  testbed: TenArmedTestbed,
                  initialActionValueEstimate: Double,
                  stepSize: Double) {
@@ -92,7 +117,11 @@ func simulate(actionTracker: ActionTracker,
     for iTimeStep in 0...nTimeStepsPerRun-1 {
         // determine next action
         //let actionIndex = strategy(actionTracker.actionValueEstimate)
-        let actionIndex = getEpsilonGreedyIndex(avEstimate: actionTracker.actionValueEstimate, epsilon: epsilon)
+        let actionIndex = getStrategyIndex(avEstimate: actionTracker.actionValueEstimate,
+                                           epsilon: epsilon,
+                                           c: c,
+                                           actionCounter: actionTracker.actionCounter,
+                                           iTimeStep: iTimeStep)
         //print("actionIndex: \(actionIndex)")
         actionTracker.actionTaken[iTimeStep][iRun] = actionIndex
         actionTracker.actionCounter[actionIndex]! += 1
@@ -113,13 +142,14 @@ func simulate(actionTracker: ActionTracker,
 }
 
 func simulateAll(actionTrackers: [ActionTracker], epsilons: [Double],
+                 cs: [Double],
                  initialActionValueEstimates: [Double],
                  stepSize: Double = -1.0) {
     for iRun in 0...nRuns-1 {
         let testbed = TenArmedTestbed()
 
-        for ((actionTracker, epsilon), initialActionValueEstimate) in zip(zip(actionTrackers, epsilons), initialActionValueEstimates) {
-            simulate(actionTracker: actionTracker, iRun: iRun, epsilon: epsilon, testbed: testbed,
+        for (((actionTracker, c), epsilon), initialActionValueEstimate) in zip(zip(zip(actionTrackers, cs), epsilons), initialActionValueEstimates) {
+            simulate(actionTracker: actionTracker, iRun: iRun, epsilon: epsilon, c: c, testbed: testbed,
                      initialActionValueEstimate: initialActionValueEstimate, stepSize: stepSize)
         }
     }
@@ -137,7 +167,8 @@ func make_figure_2_2() {
     let actionTrackers = [greedyActionTracker, epsilonGreedy1ActionTracker, epsilonGreedy2ActionTracker]
     let epsilons = [0, 0.1, 0.01]
     let initialActionValueEstimates = [0.0, 0.0, 0.0]
-    simulateAll(actionTrackers: actionTrackers, epsilons: epsilons, initialActionValueEstimates: initialActionValueEstimates)
+    let cs = [-1.0, -1.0, -1.0]
+    simulateAll(actionTrackers: actionTrackers, epsilons: epsilons, cs: cs, initialActionValueEstimates: initialActionValueEstimates)
 
     let _ = plt.figure(figsize: [10, 10])
 
@@ -167,9 +198,10 @@ func make_figure_2_3() {
 
     let actionTrackers = [epsilonGreedy1ActionConstantStepTracker, optimisticGreedyActionConstantStepTracker]
     let epsilons = [0.1, 0]
+    let cs = [-1.0, -1.0]
     let stepSize = 0.1
     let initialActionValueEstimates = [0.0, 5.0]
-    simulateAll(actionTrackers: actionTrackers, epsilons: epsilons,
+    simulateAll(actionTrackers: actionTrackers, epsilons: epsilons, cs: cs,
                 initialActionValueEstimates: initialActionValueEstimates,
                 stepSize: stepSize)
 
@@ -184,6 +216,29 @@ func make_figure_2_3() {
     plt.savefig("Fig_2.3.png")
 }
 
+func make_figure_2_4() {
+    let epsilonGreedy1ActionTracker = ActionTracker()
+    let ucbActionTracker = ActionTracker()
+
+    let actionTrackers = [epsilonGreedy1ActionTracker, ucbActionTracker]
+    let epsilons = [0.1, 0.0]
+    let initialActionValueEstimates = [0.0, 0.0]
+    let cs = [-1.0, 2.0]
+    simulateAll(actionTrackers: actionTrackers, epsilons: epsilons, cs: cs, initialActionValueEstimates: initialActionValueEstimates)
+
+    let _ = plt.figure(figsize: [6.4, 4.8])
+
+    let labels = ["eps-greedy eps=0.1", "UCB c=2"]
+    for (actionTracker, label) in zip(actionTrackers, labels) {
+        plt.plot(Array(1...nTimeStepsPerRun), actionTracker.averageRewards, label: label)
+    }
+    plt.xlabel("Steps")
+    plt.ylabel("Average reward")
+    plt.legend()
+
+    plt.savefig("Fig_2.4.png")
+}
 
 make_figure_2_2()
 make_figure_2_3()
+make_figure_2_4()
