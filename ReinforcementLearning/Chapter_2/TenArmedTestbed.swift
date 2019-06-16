@@ -34,7 +34,6 @@ struct TenArmedTestbed {
             print("Arm \(i): Mean = \(self.arms[i].mean)\t Dev = \(self.arms[i].deviation)")
         }
         print("Optimal action: ")
-        //print("\t mean = \(String(describing: optimalAction?.mean))")
         print("\t index = \(indicesOfOptimalAction)")
     }
 

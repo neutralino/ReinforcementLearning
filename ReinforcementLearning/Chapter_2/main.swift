@@ -17,7 +17,6 @@ let nTimeStepsPerRun = 1000
 
 // greedy strategy
 func getMaxActionValueEstimateIndex(avEstimate: [Int: Double]) -> Int {
-    //print("avEstimate: \(avEstimate)")
     let maxVal = avEstimate.values.max()
     let optimalActions = avEstimate.filter { $0.value == maxVal }
     let optimalActionIndices = Array(optimalActions.keys)
@@ -129,21 +128,17 @@ func simulate(actionTracker: ActionTracker,
                                            c: c,
                                            actionCounter: actionTracker.actionCounter,
                                            iTimeStep: iTimeStep)
-        //print("actionIndex: \(actionIndex)")
         actionTracker.actionTaken[iTimeStep][iRun] = actionIndex
         actionTracker.actionCounter[actionIndex]! += 1
 
         let reward = Double(testbed.arms[actionIndex].nextFloat())
-        //print("reward \(reward)")
         actionTracker.allRewards[iTimeStep][iRun] = Double(reward)
 
         let currentActionValue = actionTracker.actionValueEstimate[actionIndex]!
-        //print("currentActionValue: \(currentActionValue)")
 
         let theStepSize = stepSize > 0 ? stepSize : 1 / Double(actionTracker.actionCounter[actionIndex]!)
         let nextActionValue = currentActionValue + theStepSize * (reward - currentActionValue)
         // update action value estimate
-        //print("nextActionValue: \(nextActionValue)")
         actionTracker.actionValueEstimate[actionIndex] = nextActionValue
     }
 }
