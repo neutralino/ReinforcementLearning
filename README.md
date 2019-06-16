@@ -1,5 +1,7 @@
 # Reinforcement Learning: An Introduction
 
+(work in progress)
+
 Swift replication for Sutton & Barto's book: [Reinforcement Learning: An Introduction (2nd Edition)](http://incompleteideas.net/book/the-book-2nd.html).
 
 To run the code on a mac, execute something like:
