@@ -9,7 +9,6 @@
 import Foundation
 import Python
 PythonLibrary.useVersion(2)  // stuck with the System python for now. (i.e. /usr/bin/python -m pip)
-//import TensorFlow
 
 let plt = Python.import("matplotlib.pyplot")
 
@@ -61,6 +60,14 @@ func getStrategyIndex(avEstimate: [Int: Double], epsilon: Double, c: Double,
         return getUCBActionIndex(avEstimate: avEstimate, actionCounter: actionCounter, iTimeStep: iTimeStep, c: c)
     }
     return getEpsilonGreedyIndex(avEstimate: avEstimate, epsilon: epsilon)
+}
+
+// soft-max distribution sampling strategy
+func getGradientBanditActionIndex(energy: [Double]) -> (Int, [Double]) {
+    let partitionFunction = energy.map { exp($0) }.reduce(0, +)
+    let probDist = energy.map { exp($0) / partitionFunction }
+    let discreteDistribution = DiscreteDistribution(randomSource: random, distribution: probDist)
+    return (discreteDistribution.nextInt(), probDist)
 }
 
 class ActionTracker {
@@ -146,7 +153,7 @@ func simulateAll(actionTrackers: [ActionTracker], epsilons: [Double],
                  initialActionValueEstimates: [Double],
                  stepSize: Double = -1.0) {
     for iRun in 0...nRuns-1 {
-        let testbed = TenArmedTestbed()
+        let testbed = TenArmedTestbed(mean: 0)
 
         for (((actionTracker, c), epsilon), initialActionValueEstimate) in zip(zip(zip(actionTrackers, cs), epsilons), initialActionValueEstimates) {
             simulate(actionTracker: actionTracker, iRun: iRun, epsilon: epsilon, c: c, testbed: testbed,
@@ -239,6 +246,81 @@ func make_figure_2_4() {
     plt.savefig("Fig_2.4.png")
 }
 
+
+func gradientBanditSimulate(actionTracker: ActionTracker,
+                            iRun: Int,
+                            alpha: Double,
+                            testbed: TenArmedTestbed,
+                            withBaseline: Bool) {
+    actionTracker.optimalAction[iRun] = testbed.indicesOfOptimalAction
+    var energy = Array(repeating: 0.0, count: testbed.arms.count)
+    var averageReward = 0.0
+    for iTimeStep in 0...nTimeStepsPerRun-1 {
+        let (actionIndex, probDist) = getGradientBanditActionIndex(energy: energy)
+
+        actionTracker.actionTaken[iTimeStep][iRun] = actionIndex
+        let reward = Double(testbed.arms[actionIndex].nextFloat())
+        averageReward = averageReward + (1 / Double(iTimeStep + 1)) * (reward - averageReward)
+        actionTracker.allRewards[iTimeStep][iRun] = Double(reward)
+
+        let baseline = withBaseline ? averageReward : 0
+
+        for i in 0...testbed.arms.count-1 {
+            if i == actionIndex {
+                energy[i] += alpha * (reward - baseline) * (1 - probDist[i])
+            }
+            else {
+                energy[i] -= alpha * (reward - baseline) * probDist[i]
+            }
+        }
+    }
+}
+
+func gradientBanditSimulateAll(actionTrackers: [ActionTracker],
+                               alphas: [Double],
+                               withBaselineFlags: [Bool],
+                               mean: Float) {
+    for iRun in 0...nRuns-1 {
+        let testbed = TenArmedTestbed(mean: mean)
+
+        for ((actionTracker, alpha), withBaseline) in zip(zip(actionTrackers, alphas), withBaselineFlags) {
+            gradientBanditSimulate(actionTracker: actionTracker, iRun: iRun, alpha: alpha, testbed: testbed,
+                                   withBaseline: withBaseline)
+
+        }
+    }
+    for actionTracker in actionTrackers {
+        actionTracker.computeAverageReward()
+        actionTracker.computeAverageOptimal()
+    }
+}
+
+func make_figure_2_5() {
+    let gradientBasedActionTracker1 = ActionTracker()
+    let gradientBasedActionTracker2 = ActionTracker()
+    let gradientBasedActionTracker3 = ActionTracker()
+    let gradientBasedActionTracker4 = ActionTracker()
+    let actionTrackers = [gradientBasedActionTracker1, gradientBasedActionTracker2,
+                          gradientBasedActionTracker3, gradientBasedActionTracker4]
+    let alphas = [0.1, 0.4, 0.1, 0.4]
+    let withBaselineFlags = [false, false, true, true]
+    gradientBanditSimulateAll(actionTrackers: actionTrackers, alphas: alphas,
+                              withBaselineFlags: withBaselineFlags, mean: 4)
+
+    let _ = plt.figure(figsize: [6.4, 4.8])
+
+    plt.plot(Array(1...nTimeStepsPerRun), actionTrackers[0].averageOptimal, label: "alpha=0.1 (w/o baseline)")
+    plt.plot(Array(1...nTimeStepsPerRun), actionTrackers[1].averageOptimal, label: "alpha=0.4 (w/o baseline)")
+    plt.plot(Array(1...nTimeStepsPerRun), actionTrackers[2].averageOptimal, label: "alpha=0.1 (w/ baseline)")
+    plt.plot(Array(1...nTimeStepsPerRun), actionTrackers[3].averageOptimal, label: "alpha=0.4 (w/ baseline)")
+    plt.xlabel("Steps")
+    plt.ylabel("% Optimal award")
+    plt.legend()
+
+    plt.savefig("Fig_2.5.png")
+}
+
 make_figure_2_2()
 make_figure_2_3()
 make_figure_2_4()
+make_figure_2_5()

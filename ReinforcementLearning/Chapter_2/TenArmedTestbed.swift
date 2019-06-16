@@ -12,14 +12,16 @@ import GameplayKit
 let random = GKRandomSource()
 
 struct TenArmedTestbed {
+    let mean = 0
     var arms = [GaussianDistribution]()
-    let standardNormal = GaussianDistribution(randomSource: random, mean: 0, deviation: 1)
+    let expectedRewardDistribution: GaussianDistribution
     var indicesOfOptimalAction = [Int]()
-    init() {
+    init(mean: Float) {
         // initialize arms
+        self.expectedRewardDistribution = GaussianDistribution(randomSource: random, mean: mean, deviation: 1)
         for _ in 0...9 {
-            let mean = standardNormal.nextFloat()
-            self.arms.append(GaussianDistribution(randomSource: random, mean: mean, deviation: 1))
+            let expectedReward = expectedRewardDistribution.nextFloat()
+            self.arms.append(GaussianDistribution(randomSource: random, mean: expectedReward, deviation: 1))
         }
 
         // find optimal action
