@@ -79,6 +79,8 @@ class ActionTracker {
     var optimalAction = Array(repeating: [Int](), count: nRuns)
     var averageOptimal = Array(repeating: 0.0, count: nTimeStepsPerRun)
 
+    var meanAverageReward: Double = 0
+
     // We need to keep track of the estimated value of each action.
     // Here, we use the sample average estimate.
     // These are reset at every run.
@@ -102,6 +104,10 @@ class ActionTracker {
             }
             self.averageOptimal[iTimeStep] = Double(nOptimalActionTaken) / Double(nRuns)
         }
+    }
+
+    func computeMeanAverageReward() {
+        self.meanAverageReward = Double(self.averageRewards.reduce(0, +)) / Double(self.averageRewards.count)
     }
 }
 
@@ -162,6 +168,7 @@ func simulateAll(actionTrackers: [ActionTracker], epsilons: [Double],
 }
 
 func make_figure_2_2() {
+    print("Generating Figure 2.2...")
     let greedyActionTracker = ActionTracker()
     let epsilonGreedy1ActionTracker = ActionTracker()
     let epsilonGreedy2ActionTracker = ActionTracker()
@@ -195,6 +202,7 @@ func make_figure_2_2() {
 }
 
 func make_figure_2_3() {
+    print("Generating Figure 2.3...")
     let epsilonGreedy1ActionConstantStepTracker = ActionTracker()
     let optimisticGreedyActionConstantStepTracker = ActionTracker()
 
@@ -219,6 +227,7 @@ func make_figure_2_3() {
 }
 
 func make_figure_2_4() {
+    print("Generating Figure 2.4...")
     let epsilonGreedy1ActionTracker = ActionTracker()
     let ucbActionTracker = ActionTracker()
 
@@ -255,9 +264,9 @@ func gradientBanditSimulate(actionTracker: ActionTracker,
 
         actionTracker.actionTaken[iTimeStep][iRun] = actionIndex
         let reward = Double(testbed.arms[actionIndex].nextFloat())
-        averageReward = averageReward + (1 / Double(iTimeStep + 1)) * (reward - averageReward)
         actionTracker.allRewards[iTimeStep][iRun] = Double(reward)
 
+        averageReward = averageReward + (1 / Double(iTimeStep + 1)) * (reward - averageReward)
         let baseline = withBaseline ? averageReward : 0
 
         for i in 0...testbed.arms.count-1 {
@@ -291,6 +300,7 @@ func gradientBanditSimulateAll(actionTrackers: [ActionTracker],
 }
 
 func make_figure_2_5() {
+    print("Generating Figure 2.5...")
     let gradientBasedActionTracker1 = ActionTracker()
     let gradientBasedActionTracker2 = ActionTracker()
     let gradientBasedActionTracker3 = ActionTracker()
@@ -315,7 +325,93 @@ func make_figure_2_5() {
     plt.savefig("Fig_2.5.png")
 }
 
+func make_figure_2_6() {
+    print("Generating Figure 2.6...")
+
+    //greedy with optimistic init
+    var greedyOptimActionTrackers = [ActionTracker]()
+    let optInitialActionValueEstimates = [1.0/4.0, 1.0/2.0, 1.0, 2.0, 4.0]
+    let greedyEpsilons = Array(repeating: 0.0, count: optInitialActionValueEstimates.count)
+    let greedyCs = Array(repeating: -1.0, count: greedyEpsilons.count)
+    let stepSize = 0.1
+    for _ in greedyEpsilons {
+        greedyOptimActionTrackers.append(ActionTracker())
+    }
+    simulateAll(actionTrackers: greedyOptimActionTrackers, epsilons: greedyEpsilons, cs: greedyCs,
+                initialActionValueEstimates: optInitialActionValueEstimates, stepSize: stepSize)
+
+    var greedyOptimMeanAverageReward = [Double]()
+    for actionTracker in greedyOptimActionTrackers {
+        actionTracker.computeMeanAverageReward()
+        greedyOptimMeanAverageReward.append(actionTracker.meanAverageReward)
+    }
+
+    // epsilon greedy
+    var epsilonGreedyActionTrackers = [ActionTracker]()
+    let epsilons = [1.0/128.0, 1.0/64.0, 1.0/32.0,  1.0/16.0, 1.0/8.0, 1.0/4.0]
+    let cs = Array(repeating: -1.0, count: epsilons.count)
+    let initialActionValueEstimates = Array(repeating: 0.0, count: epsilons.count)
+    for _ in epsilons {
+        epsilonGreedyActionTrackers.append(ActionTracker())
+    }
+    simulateAll(actionTrackers: epsilonGreedyActionTrackers, epsilons: epsilons, cs: cs, initialActionValueEstimates: initialActionValueEstimates)
+
+    var epsilonGreedyMeanAverageReward = [Double]()
+    for actionTracker in epsilonGreedyActionTrackers {
+        actionTracker.computeMeanAverageReward()
+        epsilonGreedyMeanAverageReward.append(actionTracker.meanAverageReward)
+    }
+
+    // UCB
+    var ucbActionTrackers = [ActionTracker]()
+    let ucbCs = [1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0, 4.0]
+    let ucbEpsilons = Array(repeating: 0.0, count: ucbCs.count)
+    let ucbInitialActionValueEstimates = Array(repeating: 0.0, count: ucbCs.count)
+    for _ in ucbCs {
+        ucbActionTrackers.append(ActionTracker())
+    }
+    simulateAll(actionTrackers: ucbActionTrackers, epsilons: ucbEpsilons, cs: ucbCs, initialActionValueEstimates: ucbInitialActionValueEstimates)
+
+    var ucbMeanAverageReward = [Double]()
+    for actionTracker in ucbActionTrackers {
+        actionTracker.computeMeanAverageReward()
+        ucbMeanAverageReward.append(actionTracker.meanAverageReward)
+    }
+
+    // gradient bandit
+    var gradActionTrackers = [ActionTracker]()
+    let alphas = [1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0, 4.0]
+    for _ in alphas {
+        gradActionTrackers.append(ActionTracker())
+    }
+    let withBaselineFlags = Array(repeating: true, count: alphas.count)
+
+    gradientBanditSimulateAll(actionTrackers: gradActionTrackers, alphas: alphas,
+                              withBaselineFlags: withBaselineFlags, mean: 0)
+
+    var gradMeanAverageReward = [Double]()
+    for actionTracker in gradActionTrackers {
+        actionTracker.computeMeanAverageReward()
+        gradMeanAverageReward.append(actionTracker.meanAverageReward)
+    }
+
+    // plot everything
+    let fig = plt.figure(figsize: [6.4, 4.8])
+    let ax = fig.gca()
+    plt.plot(optInitialActionValueEstimates, greedyOptimMeanAverageReward, label: "greedy with opt. init, step=0.1")
+    plt.plot(epsilons, epsilonGreedyMeanAverageReward, label: "eps-greedy")
+    plt.plot(ucbCs, ucbMeanAverageReward, label: "UCB")
+    plt.plot(alphas, gradMeanAverageReward, label: "gradient bandit")
+    ax.set_xscale("log", basex: 2)
+    plt.xlabel("eps alpha c Q_0")
+    plt.ylabel("Average reward over first 1000 steps")
+    plt.legend()
+
+    plt.savefig("Fig_2.6.png")
+}
+
 make_figure_2_2()
 make_figure_2_3()
 make_figure_2_4()
 make_figure_2_5()
+make_figure_2_6()
