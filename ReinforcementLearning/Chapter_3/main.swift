@@ -134,6 +134,8 @@ func make_figure_3_2() {
         }
     }
     ax.set_title("Gridworld state-value function")
+    ax.tick_params(axis: "x",labelbottom: "off")
+    ax.tick_params(axis: "y",labelleft: "off")
     plt.savefig("Fig_3.2.png")
 }
 
