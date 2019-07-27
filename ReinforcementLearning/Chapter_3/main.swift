@@ -84,14 +84,17 @@ func move(_ p: Point, _ action: Action) -> (Point, Int) {
     }
 }
 
-func generateBellmanEquation(_ p: Point) -> (Double, Point, Point, Point, Point) {
+func getNextStatesAndRewards(_ p: Point) -> (Point, Point, Point, Point, Int, Int, Int, Int) {
     let (northState, northReward) = move(p, Action.north)
     let (southState, southReward) = move(p, Action.south)
     let (eastState, eastReward) = move(p, Action.east)
     let (westState, westReward) = move(p, Action.west)
+    return (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward)
+}
 
+func generateBellmanEquation(_ p: Point) -> (Double, Point, Point, Point, Point) {
+    let (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward) = getNextStatesAndRewards(p)
     let const = prob * Double(northReward + southReward + eastReward + westReward)
-
     return (const, northState, southState, eastState, westState)
 }
 
@@ -141,15 +144,6 @@ func make_figure_3_2() {
     let v = linalg.solve(A, b)
 
     make_value_function_heatmap(valueFunction: v, title: "Gridworld state-value function", filename: "Fig_3.2.png")
-}
-
-func getNextStatesAndRewards(_ p: Point) -> (Point, Point, Point, Point, Int, Int, Int, Int) {
-    let (northState, northReward) = move(p, Action.north)
-    let (southState, southReward) = move(p, Action.south)
-    let (eastState, eastReward) = move(p, Action.east)
-    let (westState, westReward) = move(p, Action.west)
-
-    return (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward)
 }
 
 func make_figure_3_5() {
