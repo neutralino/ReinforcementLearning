@@ -84,7 +84,7 @@ func move(_ p: Point, _ action: Action) -> (Point, Int) {
     }
 }
 
-func generateEquation(_ p: Point) -> (Double, Point, Point, Point, Point) {
+func generateBellmanEquation(_ p: Point) -> (Double, Point, Point, Point, Point) {
     let (northState, northReward) = move(p, Action.north)
     let (southState, southReward) = move(p, Action.south)
     let (eastState, eastReward) = move(p, Action.east)
@@ -95,14 +95,32 @@ func generateEquation(_ p: Point) -> (Double, Point, Point, Point, Point) {
     return (const, northState, southState, eastState, westState)
 }
 
+func make_value_function_heatmap(valueFunction: PythonObject, title: String, filename: String) {
+    let vGrid = np.flipud(np.reshape(valueFunction, Python.tuple([n, n])))
+
+    let fig = plt.figure(figsize: [6.4, 4.8])
+    let ax = fig.gca()
+
+    ax.imshow(vGrid, cmap: "YlGn", interpolation: "none")
+    for i in 0..<n {
+        for j in 0..<n {
+            ax.text(j, i, np.around(vGrid[i, j], 1), ha: "center", va: "center", color: "b")
+        }
+    }
+    ax.set_title(title)
+    ax.tick_params(axis: "x",labelbottom: "off")
+    ax.tick_params(axis: "y",labelleft: "off")
+    plt.savefig(filename)
+}
+
 func make_figure_3_2() {
     let A = np.zeros([nStates, nStates])
     let b = np.zeros([nStates, 1])
 
-    //Compute the Bellman equation for each state
+    // Compute the Bellman equation for each state
     for i in 0..<nStates {
         let p = intToGrid(i)
-        let (const, northState, southState, eastState, westState) = generateEquation(p)
+        let (const, northState, southState, eastState, westState) = generateBellmanEquation(p)
 
         let coef = PythonObject(prob * gamma)
 
@@ -122,21 +140,48 @@ func make_figure_3_2() {
     // solve for state-value function
     let v = linalg.solve(A, b)
 
-    let vGrid = np.flipud(np.reshape(v, Python.tuple([n, n])))
+    make_value_function_heatmap(valueFunction: v, title: "Gridworld state-value function", filename: "Fig_3.2.png")
+}
 
-    let fig = plt.figure(figsize: [6.4, 4.8])
-    let ax = fig.gca()
+func getNextStatesAndRewards(_ p: Point) -> (Point, Point, Point, Point, Int, Int, Int, Int) {
+    let (northState, northReward) = move(p, Action.north)
+    let (southState, southReward) = move(p, Action.south)
+    let (eastState, eastReward) = move(p, Action.east)
+    let (westState, westReward) = move(p, Action.west)
 
-    ax.imshow(vGrid, cmap: "YlGn", interpolation: "none")
-    for i in 0..<n {
-        for j in 0..<n {
-            ax.text(j, i, np.around(vGrid[i, j], 1), ha: "center", va: "center", color: "b")
+    return (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward)
+}
+
+func make_figure_3_5() {
+    //solve via value iteration (see Section 4.4)
+    let valueFunction = np.zeros([nStates, 1])
+
+    var delta = 0.0
+    let minDelta = 1e-5
+    var count = 0
+    repeat {
+        delta = 0.0
+        count += 1
+        for i in 0..<nStates {
+            let p = intToGrid(i)
+
+            let (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward) = getNextStatesAndRewards(p)
+
+            // determine the best value by looping through all actions
+            let expectedNorthActionValue = Double(northReward) + gamma * Double(valueFunction[gridToInt(northState)])!
+            let expectedSouthActionValue = Double(southReward) + gamma * Double(valueFunction[gridToInt(southState)])!
+            let expectedWestActionValue  = Double(westReward)  + gamma * Double(valueFunction[gridToInt(westState)])!
+            let expectedEastActionValue  = Double(eastReward)  + gamma * Double(valueFunction[gridToInt(eastState)])!
+            let nextV = max(expectedNorthActionValue, expectedSouthActionValue, expectedWestActionValue, expectedEastActionValue)
+
+            delta = max(delta, abs(Double(valueFunction[i])! - nextV))
+            valueFunction[i] = PythonObject(nextV)
         }
-    }
-    ax.set_title("Gridworld state-value function")
-    ax.tick_params(axis: "x",labelbottom: "off")
-    ax.tick_params(axis: "y",labelleft: "off")
-    plt.savefig("Fig_3.2.png")
+        print("Finished \(count) iterations, delta = \(delta)")
+    } while delta > minDelta
+
+    make_value_function_heatmap(valueFunction: valueFunction, title: "Gridworld optimal state-value function", filename: "Fig_3.5.png")
 }
 
 make_figure_3_2()
+make_figure_3_5()
