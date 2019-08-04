@@ -19,6 +19,7 @@ let nStates = n * n
 let gamma = 0.9
 let prob = 0.25
 
+// NB: Point(0, 0) is the bottom-left corner in this chapter.
 struct Point: Equatable {
     var x: Int
     var y: Int
