@@ -74,12 +74,6 @@ func getNextStatesAndRewards(_ p: Point) -> (Point, Point, Point, Point, Int, In
     return (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward)
 }
 
-func generateBellmanEquation(_ p: Point) -> (Double, Point, Point, Point, Point) {
-    let (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward) = getNextStatesAndRewards(p)
-    let const = prob * Double(northReward + southReward + eastReward + westReward)
-    return (const, northState, southState, eastState, westState)
-}
-
 func make_value_function_heatmap(valueFunction: PythonObject, title: String, filename: String) {
     let vGrid = np.reshape(valueFunction, Python.tuple([n, n]))
     let fig = plt.figure(figsize: [6.4, 4.8])
@@ -100,7 +94,6 @@ func make_value_function_heatmap(valueFunction: PythonObject, title: String, fil
 func make_figure_4_1() {
     // perform iterative policy evaluation for the random policy
     let v = np.zeros([nStates, 1])
-
     var delta = 0.0
     let minDelta = 1e-5
     var count = 0
@@ -123,7 +116,6 @@ func make_figure_4_1() {
         print("Finished \(count) iterations, delta = \(delta)")
     } while delta > minDelta
     make_value_function_heatmap(valueFunction: v, title: "Small gridworld state-value function", filename: "Fig_4.1.png")
-
 }
 
 make_figure_4_1()
