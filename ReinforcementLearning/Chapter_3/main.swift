@@ -19,82 +19,8 @@ let nStates = n * n
 let gamma = 0.9
 let prob = 0.25
 
-// NB: Point(0, 0) is the bottom-left corner in this chapter.
-struct Point: Equatable {
-    var x: Int
-    var y: Int
-    init(_ x: Int, _ y: Int) {
-        self.x = x
-        self.y = y
-    }
-}
-
-enum Action {
-    case north
-    case south
-    case east
-    case west
-}
-
-func intToGrid(_ i: Int) -> Point {
-    precondition(i < nStates, "Index must map to valid grid state.")
-    return Point(i % n, i / n)
-}
-
-func gridToInt(_ p: Point) -> Int {
-    return n * p.y + p.x
-}
-
-// return sebsequent state and reward
-func move(_ p: Point, _ action: Action) -> (Point, Int) {
-    if p == Point(1, 4) {
-        return (Point(1, 0), 10)
-    }
-    else if p == Point(3, 4){
-        return (Point(3, 2), 5)
-    }
-    switch action {
-    case .north:
-        if p.y+1 > n-1 {
-            return (Point(p.x, p.y), -1)
-        }
-        else {
-            return (Point(p.x, p.y+1), 0)
-        }
-    case .south:
-        if p.y-1 < 0 {
-            return (Point(p.x, p.y), -1)
-        }
-        else {
-            return (Point(p.x, p.y-1), 0)
-        }
-    case .east:
-        if p.x+1 > n-1 {
-            return (Point(p.x, p.y), -1)
-        }
-        else {
-            return (Point(p.x+1, p.y), 0)
-        }
-    case .west:
-        if p.x-1 < 0 {
-            return (Point(p.x, p.y), -1)
-        }
-        else {
-            return (Point(p.x-1, p.y), 0)
-        }
-    }
-}
-
-func getNextStatesAndRewards(_ p: Point) -> (Point, Point, Point, Point, Int, Int, Int, Int) {
-    let (northState, northReward) = move(p, Action.north)
-    let (southState, southReward) = move(p, Action.south)
-    let (eastState, eastReward) = move(p, Action.east)
-    let (westState, westReward) = move(p, Action.west)
-    return (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward)
-}
-
-func generateBellmanEquation(_ p: Point) -> (Double, Point, Point, Point, Point) {
-    let (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward) = getNextStatesAndRewards(p)
+func generateBellmanEquation(_ p: Point, _ gridWorld: GridWorld) -> (Double, Point, Point, Point, Point) {
+    let (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward) = gridWorld.getNextStatesAndRewards(p)
     let const = prob * Double(northReward + southReward + eastReward + westReward)
     return (const, northState, southState, eastState, westState)
 }
@@ -118,24 +44,26 @@ func make_value_function_heatmap(valueFunction: PythonObject, title: String, fil
 }
 
 func make_figure_3_2() {
+    let gridWorld = GridWorld(n)
+
     let A = np.zeros([nStates, nStates])
     let b = np.zeros([nStates, 1])
 
     // Compute the Bellman equation for each state
     for i in 0..<nStates {
-        let p = intToGrid(i)
-        let (const, northState, southState, eastState, westState) = generateBellmanEquation(p)
+        let p = gridWorld.intToGrid(i)
+        let (const, northState, southState, eastState, westState) = generateBellmanEquation(p, gridWorld)
 
         let coef = PythonObject(prob * gamma)
 
         // fill row in matrix
-        A[i, gridToInt(northState)] += coef
-        A[i, gridToInt(southState)] += coef
-        A[i, gridToInt(eastState)] += coef
-        A[i, gridToInt(westState)] += coef
+        A[i, gridWorld.gridToInt(northState)] += coef
+        A[i, gridWorld.gridToInt(southState)] += coef
+        A[i, gridWorld.gridToInt(eastState)] += coef
+        A[i, gridWorld.gridToInt(westState)] += coef
 
         // move p to RHS
-        A[i, gridToInt(p)] -= 1
+        A[i, gridWorld.gridToInt(p)] -= 1
 
         // move const to LHS
         b[i] = PythonObject(-const)
@@ -148,6 +76,8 @@ func make_figure_3_2() {
 }
 
 func make_figure_3_5() {
+    let gridWorld = GridWorld(n)
+
     //solve via value iteration (see Section 4.4)
     let valueFunction = np.zeros([nStates, 1])
 
@@ -158,15 +88,15 @@ func make_figure_3_5() {
         delta = 0.0
         count += 1
         for i in 0..<nStates {
-            let p = intToGrid(i)
+            let p = gridWorld.intToGrid(i)
 
-            let (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward) = getNextStatesAndRewards(p)
+            let (northState, southState, eastState, westState, northReward, southReward, eastReward, westReward) = gridWorld.getNextStatesAndRewards(p)
 
             // determine the best value by looping through all actions
-            let expectedNorthActionValue = Double(northReward) + gamma * Double(valueFunction[gridToInt(northState)])!
-            let expectedSouthActionValue = Double(southReward) + gamma * Double(valueFunction[gridToInt(southState)])!
-            let expectedWestActionValue  = Double(westReward)  + gamma * Double(valueFunction[gridToInt(westState)])!
-            let expectedEastActionValue  = Double(eastReward)  + gamma * Double(valueFunction[gridToInt(eastState)])!
+            let expectedNorthActionValue = Double(northReward) + gamma * Double(valueFunction[gridWorld.gridToInt(northState)])!
+            let expectedSouthActionValue = Double(southReward) + gamma * Double(valueFunction[gridWorld.gridToInt(southState)])!
+            let expectedWestActionValue  = Double(westReward)  + gamma * Double(valueFunction[gridWorld.gridToInt(westState)])!
+            let expectedEastActionValue  = Double(eastReward)  + gamma * Double(valueFunction[gridWorld.gridToInt(eastState)])!
             let nextV = max(expectedNorthActionValue, expectedSouthActionValue, expectedWestActionValue, expectedEastActionValue)
 
             delta = max(delta, abs(Double(valueFunction[i])! - nextV))
