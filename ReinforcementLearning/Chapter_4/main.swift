@@ -244,6 +244,75 @@ func make_figure_4_2() {
     plt.savefig("Fig_4.2.png")
 }
 
+func run_value_iteration_4_3(v: inout [Double],
+                             gamblersProblem: GamblersProblem) -> [[Double]]{
+    var vIterations = [[Double]]()
+    vIterations.append(Array(v))
+    print("Running value iteration")
+    var delta = 0.0
+    let minDelta = 1e-6
+    var count = 0
+    repeat {
+        delta = 0.0
+        count += 1
+        for i in 0..<gamblersProblem.n {
+            let nextV = gamblersProblem.nextValue(state: i+1, v: v).0
+            delta = max(delta, abs(v[i] - nextV))
+            v[i] = nextV
+        }
+        print("Finished \(count) iterations, delta = \(delta)")
+        vIterations.append(Array(v))
+    } while delta > minDelta
+    return vIterations
+}
+
+func get_policy_from_value(v: [Double],
+                           gamblersProblem: GamblersProblem) -> [Int] {
+    var policy = Array(repeating: -1, count: v.count)
+    for i in 0..<policy.count {
+        let bestActions = gamblersProblem.nextValue(state: i+1, v: v).1
+        print(bestActions)
+        // we don't want to ever select the null action (pointless action)
+        policy[i] = bestActions.filter { $0 != 0 }.first!
+    }
+    return policy
+}
+
+func make_figure_4_3() {
+    let n = 99
+    let gamblersProblem = GamblersProblem(n: n, pHead: 0.4)
+
+    // initial value function for states 1 through 100
+    // v[0] = state 1 ($1 capital)
+    // ...
+    // v[98] = state 99 ($99 capital)
+    // (states 0 and 100 are terminal and have 0 value)
+    var v = Array(repeating: 0.0, count: n)
+    print(v.count)
+    let vIterations = run_value_iteration_4_3(v: &v, gamblersProblem: gamblersProblem)
+
+    // get corresponding policy
+    let policy = get_policy_from_value(v: vIterations.last!, gamblersProblem: gamblersProblem)
+    print(policy)
+
+    let figAndAx = plt.subplots(nrows: 2, ncols: 1, figsize: [6.4, 6.4]).tuple2
+    let ax = figAndAx.1
+    let xPoints = Array(1...n)
+    ax[0].plot(xPoints, vIterations[1], label: "sweep 1")
+    ax[0].plot(xPoints, vIterations[2], label: "sweep 2")
+    ax[0].plot(xPoints, vIterations[3], label: "sweep 3")
+    ax[0].plot(xPoints, vIterations.last, label: "final sweep")
+    ax[0].legend()
+    ax[0].set_xlabel("Capital")
+    ax[0].set_ylabel("Value Estimate")
+
+    ax[1].bar(xPoints, policy)
+    ax[1].set_xlabel("Capital")
+    ax[1].set_ylabel("Final Policy (stake)")
+
+    plt.savefig("Fig_4.3.png")
+}
 
 make_figure_4_1()
 make_figure_4_2()
+make_figure_4_3()
