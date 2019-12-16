@@ -4,10 +4,13 @@
 
 Swift replication (with some Python interoperability) for Sutton & Barto's book: [Reinforcement Learning: An Introduction (2nd Edition)](http://incompleteideas.net/book/the-book-2nd.html).
 
-To run the code on a mac, execute something like:
+Last tested with Swift 5.0 using the Swift for Tensorflow toolchain (`swift-tensorflow-RELEASE-0.3.1.xctoolchain`).
+
+On macOS, to run the code for a given chapter, compile all files in the chapter folder, e.g.
 ```
-$ swiftc -O -sdk `xcrun --show-sdk-path` main.swift TenArmedTestbed.swift GaussianDistribution.swift -o blah
-$ ./blah
+$ cd ReinforcementLearning/Chapter_2
+$ swiftc -O -sdk `xcrun --show-sdk-path` main.swift TenArmedTestbed.swift GaussianDistribution.swift DiscreteDistribution.swift -o program
+$ ./program
 ```
 
 # Contents
