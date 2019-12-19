@@ -78,10 +78,10 @@ class BlackJack {
     }
 
     func startGame(){
-        playerCards.append(drawCard())
-        playerCards.append(drawCard())
-        dealerCards.append(drawCard())
-        dealerCards.append(drawCard())
+        playerHit()
+        playerHit()
+        dealerHit()
+        dealerHit()
         updateCurrentState()
         sequence.append(currentState)
     }
@@ -195,6 +195,19 @@ class BlackJack {
         updateCurrentState()
         var state = currentState
         while policy.keys.contains(state) && policy[state]! {
+            playerHit()
+            stateActionSequence.append(StateAction(state, true))
+            updateCurrentState()
+            state = currentState
+            sequence.append(state)
+        }
+        stateActionSequence.append(StateAction(state, false))
+    }
+
+    func runPlayerRandomPolicy(){
+        updateCurrentState()
+        var state = currentState
+        while Bool.random() {
             playerHit()
             stateActionSequence.append(StateAction(state, true))
             updateCurrentState()

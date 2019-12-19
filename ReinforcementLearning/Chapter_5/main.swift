@@ -4,11 +4,10 @@ import Python
 let plt = Python.import("matplotlib.pyplot")
 let np = Python.import("numpy")
 
-
 func initializePolicy() -> [State: Bool] {
     // the default policy sticks if the player's sum is 20 or 21, else hits
     var policy = [State: Bool]()
-    for isum in 12...21 {
+    for isum in 12...30 {
         for idealer in 1...10 {
             if isum < 20 {
                 policy[State(isum, idealer, true)] = true
@@ -252,5 +251,82 @@ func make_figure_5_2() {
     plt.savefig("Fig_5.2.png")
 }
 
+func make_figure_5_3() {
+    print("Generating Figure 5.3")
+
+    let nRuns = 100
+    let nEpisodes = 10000
+
+    let trueV = -0.27726
+    var allVs = [[Double]]()
+    var allWeightedVs = [[Double]]()
+    var MSEs = Array(repeating: 0.0, count: nEpisodes)
+    var MSEsWeightedVs = Array(repeating: 0.0, count: nEpisodes)
+
+    for iRun in 0..<nRuns {
+        if iRun % 10 == 0 {
+            print("Run \(iRun)")
+        }
+        var rhos = [Double]()
+        var Gs = [Double]()
+        var Vs = [Double]()
+        var weightedVs = [Double]()
+        for _ in 0..<nEpisodes {
+            let blackJack = BlackJack()
+
+            //we want to evaluate the value of this state under the target policy
+            blackJack.playerCards = [Card(1, Suit.spade), Card(2, Suit.spade)]
+            blackJack.dealerCards = [Card(2, Suit.spade)]
+            blackJack.dealerHit()
+            blackJack.updateCurrentState()
+
+            let targetPolicy = initializePolicy()
+
+            blackJack.runPlayerRandomPolicy()
+            blackJack.runDealerPolicy()
+
+            let G = Double(blackJack.computeReward())
+
+            // compute rho of this trajectory
+            let denominator = pow(0.5, Double(blackJack.stateActionSequence.count))
+            let numerator = blackJack.stateActionSequence.map { (targetPolicy[$0.state] == $0.action) ? 1.0 : 0.0 }.reduce(1, *)
+            let rho = numerator / denominator
+
+            Gs.append(G)
+            rhos.append(rho)
+
+            var vNumerator = 0.0
+            for (p, g) in zip(rhos, Gs) {
+                vNumerator += p * g
+            }
+            let V = vNumerator / Double(Gs.count)
+            Vs.append(V)
+
+            let weightedV = (rhos.reduce(0, +) == 0) ? 0.0 : vNumerator / rhos.reduce(0, +)
+            weightedVs.append(weightedV)
+        }
+        allVs.append(Vs)
+        allWeightedVs.append(weightedVs)
+    }
+
+    // compute MSEs
+    for iEpisode in 0..<nEpisodes {
+        for jRun in 0..<nRuns {
+            MSEs[iEpisode] += pow(trueV - allVs[jRun][iEpisode], 2.0)
+            MSEsWeightedVs[iEpisode] += pow(trueV - allWeightedVs[jRun][iEpisode], 2.0)
+        }
+        MSEs[iEpisode] /= Double(nRuns)
+        MSEsWeightedVs[iEpisode] /= Double(nRuns)
+    }
+
+    plt.semilogx(Array(1...nEpisodes), MSEs, label: "Ordinary importance sampling")
+    plt.semilogx(Array(1...nEpisodes), MSEsWeightedVs, label: "Weighted importance sampling")
+    plt.xlabel("Episodes (log scale)")
+    plt.ylabel("Mean square error\n(average over 100 runs)")
+    plt.legend()
+    plt.savefig("Fig_5.3.png")
+}
+
 make_figure_5_1()
 make_figure_5_2()
+make_figure_5_3()
