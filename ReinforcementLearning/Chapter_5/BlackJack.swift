@@ -41,16 +41,35 @@ extension State: Equatable {
   }
 }
 
+struct StateAction: Hashable {
+    let state: State
+    let action: Bool
+
+    init(_ s: State, _ a: Bool) {
+        state = s
+        action = a
+    }
+}
+
+extension StateAction: Equatable {
+  static func == (lhs: StateAction, rhs: StateAction) -> Bool {
+    return lhs.state == rhs.state &&
+      lhs.action == rhs.action
+  }
+}
+
 class BlackJack {
     var dealerCards = [Card]()
     var playerCards = [Card]()
     var playerNUseableAces: Int = 0
     var sequence = [State]()
+    var stateActionSequence = [StateAction]()
+    var currentState: State = State(0, 0, false)
 
-    func currentState() -> State {
-        return State(computePlayerHand(),
-                     min(viewDealerHand().value, 10),
-                     playerHasUsableAce())
+    func updateCurrentState() {
+        currentState = State(computePlayerHand(),
+                             min(viewDealerHand().value, 10),
+                             playerHasUsableAce())
     }
 
     // draw card from deck with replacement
@@ -63,12 +82,40 @@ class BlackJack {
         playerCards.append(drawCard())
         dealerCards.append(drawCard())
         dealerCards.append(drawCard())
-        sequence.append(currentState())
+        updateCurrentState()
+        sequence.append(currentState)
+    }
+
+    // for Monte Carlo ES, to get better stats on some states
+    func startRandomStateGame() {
+        let sum = Int.random(in: 12...21)
+        let dealer = Int.random(in: 1...10)
+        let useableAce = (sum == 21) ? true : Bool.random()
+
+        // pick any random cards that satisfy this state
+        dealerCards.append(Card(dealer, Suit.allCases.randomElement()!))
+        dealerCards.append(drawCard())
+        if useableAce {
+            playerCards.append(Card(1, Suit.allCases.randomElement()!))
+            playerCards.append(Card(sum-11, Suit.allCases.randomElement()!))
+        }
+        else {
+            playerCards.append(Card(10, Suit.allCases.randomElement()!))
+            playerCards.append(Card(sum-10, Suit.allCases.randomElement()!))
+        }
+        updateCurrentState()
+        sequence.append(currentState)
+    }
+
+    func initializeStateActionSequence(action: Bool) {
+        stateActionSequence.append(StateAction(currentState, action))
+        if action {
+            playerHit()
+        }
     }
 
     func playerHit(){
         playerCards.append(drawCard())
-        //print(playerCards)
     }
 
     func dealerHit(){
@@ -106,7 +153,7 @@ class BlackJack {
     func computeSum(hand: [Card]) -> Int {
         var sum = 0
         // if there are aces, treat them as 11's. If the sum exceeds
-        // 21, iteratively back the aces off to 1's.
+        // 21, back the aces off one by one to 1's.
         let nAce = nAces(hand: hand)
         for i in (0...nAce).reversed() {
             sum = sumWithNAces(hand: hand, nAces: i)
@@ -143,14 +190,18 @@ class BlackJack {
         return playerNUseableAces > 0
     }
 
-    // this policy sticks if the player's sum is 20 or 21, else hits
-    func runPlayerPolicy() {
-        var state = currentState()
-        while state.sum < 20 {
+
+    func runPlayerPolicy(policy: [State: Bool]) {
+        updateCurrentState()
+        var state = currentState
+        while policy.keys.contains(state) && policy[state]! {
             playerHit()
-            state = currentState()
+            stateActionSequence.append(StateAction(state, true))
+            updateCurrentState()
+            state = currentState
             sequence.append(state)
         }
+        stateActionSequence.append(StateAction(state, false))
     }
 
     // dealer policy is to hit if the sum is less than 17
