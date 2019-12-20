@@ -327,6 +327,54 @@ func make_figure_5_3() {
     plt.savefig("Fig_5.3.png")
 }
 
+func make_figure_5_4() {
+    print("Generating Figure 5.4")
+    let nRuns = 10
+    let nEpisodes = 1000000
+
+    let fig = plt.figure(figsize: [6.4, 4.8])
+    let ax = fig.gca()
+
+    for iRun in 0..<nRuns {
+        print("Run #\(iRun)")
+        var rhos = [Double]()
+        var Gs = [Double]()
+        var Vs = [Double]()
+
+        for _ in 0..<nEpisodes {
+            let infVarMDP = InfiniteVariance()
+            var terminated = false
+            var G = 0.0
+            while !terminated {
+                let stateAndReward = infVarMDP.getNextStateAndRewardBehaviorPolicy()
+                terminated = stateAndReward.0
+                G += Double(stateAndReward.1)
+            }
+            Gs.append(G)
+
+            let denominator = pow(0.5, Double(infVarMDP.stateActionSequence.count))
+            // target policy always chooses left
+            let numerator = infVarMDP.stateActionSequence.map { $0.action == IVAction.left ? 1.0 : 0.0 }.reduce(1, *)
+            let rho = numerator / denominator
+            rhos.append(rho)
+
+            var vNumerator = 0.0
+            for (p, g) in zip(rhos, Gs) {
+                vNumerator += p * g
+            }
+            let V = vNumerator / Double(Gs.count)
+            Vs.append(V)
+        }
+        plt.semilogx(Array(1...nEpisodes), Vs)
+    }
+    plt.xlabel("Episodes (log scale)")
+    plt.ylabel("MC estimate of v_pi(s) with ordinary importance sampling\n(10 runs)")
+    plt.ylim([0, 4])
+    ax.grid(axis: "y")
+    plt.savefig("Fig_5.4.png")
+}
+
 make_figure_5_1()
 make_figure_5_2()
 make_figure_5_3()
+make_figure_5_4()
