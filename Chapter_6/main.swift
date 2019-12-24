@@ -7,7 +7,7 @@ let np = Python.import("numpy")
 let stateToIndex = [State.A: 0, State.B: 1, State.C: 2, State.D: 3, State.E: 4]
 let trueV = Array(1...5).map{ Double($0) / 6.0 }
 
-func run_td0_episode(alpha: Double, V: inout [Double]){
+func run_td0_episode(alpha: Double, V: inout [Double]) {
     let randomWalk = RandomWalk()
     randomWalk.generateStateRewardSequence()
 
@@ -15,7 +15,7 @@ func run_td0_episode(alpha: Double, V: inout [Double]){
     for (i, stateReward) in seq.enumerated() {
         let nextVS = (i < seq.count - 1) ? V[stateToIndex[seq[i+1].state]!] : 0.0
         let delta = stateReward.reward + nextVS - V[stateToIndex[stateReward.state]!]
-        V[stateToIndex[stateReward.state]!] += alpha * (delta)
+        V[stateToIndex[stateReward.state]!] += alpha * delta
     }
 }
 
@@ -28,8 +28,53 @@ func run_mc_episode(alpha: Double, V: inout [Double]){
     // In this problem, the return is just the final reward.
     let G = seq.last!.reward
     for stateReward in seq {
-        let delta = G - V[stateToIndex[stateReward.state]!]
-        V[stateToIndex[stateReward.state]!] += alpha * (delta)
+        let stateIndex = stateToIndex[stateReward.state]!
+        let delta = G - V[stateIndex]
+        V[stateIndex] += alpha * delta
+    }
+}
+
+func run_batch_td0_update(episodes: [[StateReward]], alpha: Double, V: inout [Double]) {
+    let minDelta = 1e-5
+    var minUpdate = 1.0
+    while minUpdate > minDelta {
+        var updates = Array(repeating: 0.0, count: V.count)
+
+        for seq in episodes {
+            for (i, stateReward) in seq.enumerated() {
+                let stateIndex = stateToIndex[stateReward.state]!
+                let nextVS = (i < seq.count - 1) ? V[stateToIndex[seq[i+1].state]!] : 0.0
+                let delta = stateReward.reward + nextVS - V[stateIndex]
+                updates[stateIndex] += alpha * delta
+            }
+        }
+
+        for (stateIndex, update) in updates.enumerated() {
+            V[stateIndex] += update
+        }
+        minUpdate = updates.max()!
+    }
+}
+
+func run_batch_mc_update(episodes: [[StateReward]], alpha: Double, V: inout [Double]) {
+    let minDelta = 1e-5
+    var minUpdate = 1.0
+    while minUpdate > minDelta {
+        var updates = Array(repeating: 0.0, count: V.count)
+
+        for seq in episodes {
+            let G = seq.last!.reward
+            for stateReward in seq {
+                let stateIndex = stateToIndex[stateReward.state]!
+                let delta = G - V[stateIndex]
+                updates[stateIndex] += alpha * delta
+            }
+        }
+
+        for (stateIndex, update) in updates.enumerated() {
+            V[stateIndex] += update
+        }
+        minUpdate = updates.max()!
     }
 }
 
@@ -127,6 +172,35 @@ func fill_learning_curve_subplot(ax: PythonObject, initialV: [Double]) {
     ax[1].legend()
 }
 
+func generateBatchedUpdateEstimates(initialV: [Double], alpha: Double, nRuns: Int, nEpisodes: Int, TD: Bool) -> [[[Double]]] {
+    var allVsRuns = [[[Double]]]()
+
+    for iRun in 0..<nRuns {
+        if iRun % 10 == 0 {
+            print("Run #\(iRun+1)")
+        }
+        var allVs = [[Double]]()
+        var episodes = [[StateReward]]()
+        for _ in 0..<nEpisodes {
+            var V = initialV
+            let randomWalk = RandomWalk()
+            randomWalk.generateStateRewardSequence()
+            let seq = randomWalk.stateRewardSequence
+            episodes.append(seq)
+
+            if TD {
+                run_batch_td0_update(episodes: episodes, alpha: alpha, V: &V)
+            }
+            else {
+                run_batch_mc_update(episodes: episodes, alpha: alpha, V: &V)
+            }
+            allVs.append(V)
+        }
+        allVsRuns.append(allVs)
+    }
+    return allVsRuns
+}
+
 func make_example_6_2() {
     print("Generating Example 6.2")
 
@@ -142,8 +216,30 @@ func make_example_6_2() {
 }
 
 func make_figure_6_2() {
+    print("Generating Figure 6.2")
+    let _ = plt.figure(figsize: [6.4, 4.8])
 
+    let nRuns = 100
+    let nEpisodes = 100
+    let alpha = 0.001
 
+    // initial value function
+    let V = Array(repeating: 0.5, count: 5)
+
+    var allVsRuns = generateBatchedUpdateEstimates(initialV: V, alpha: alpha, nRuns: nRuns, nEpisodes: nEpisodes, TD: true)
+    var RMSEs = computeRMSE(allVsRuns: allVsRuns)
+    plt.plot(Array(0..<nEpisodes), RMSEs, label: "TD: alpha=\(alpha)")
+
+    allVsRuns = generateBatchedUpdateEstimates(initialV: V, alpha: alpha, nRuns: nRuns, nEpisodes: nEpisodes, TD: false)
+    RMSEs = computeRMSE(allVsRuns: allVsRuns)
+    plt.plot(Array(0..<nEpisodes), RMSEs, label: "MC: alpha=\(alpha)")
+
+    plt.title("Batch Training")
+    plt.xlabel("Episodes")
+    plt.ylabel("RMS error, averaged over states")
+    plt.ylim([0.0, 0.25])
+    plt.legend()
+    plt.savefig("Fig_6.2.png")
 }
 
 make_example_6_2()
