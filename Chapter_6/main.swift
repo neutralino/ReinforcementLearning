@@ -141,4 +141,10 @@ func make_example_6_2() {
     plt.savefig("Example_6.2.png")
 }
 
+func make_figure_6_2() {
+
+
+}
+
 make_example_6_2()
+make_figure_6_2()
