@@ -6,12 +6,7 @@ Swift replication (with some Python interoperability) for Sutton & Barto's book:
 
 Last tested with Swift 5.0 using the Swift for Tensorflow toolchain (`swift-tensorflow-RELEASE-0.3.1.xctoolchain`) and Python 3.7.
 
-On macOS, to run the code for a given chapter, compile all files in the chapter folder, e.g.
-```
-$ cd Chapter_2
-$ swiftc -O -sdk `xcrun --show-sdk-path` main.swift TenArmedTestbed.swift GaussianDistribution.swift DiscreteDistribution.swift -o program
-$ ./program
-```
+On macOS, to run the code for a given chapter, run the `compile_and_run.sh` script within the chapter folder.
 
 # Contents
 
