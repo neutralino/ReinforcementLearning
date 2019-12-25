@@ -4,9 +4,9 @@
 
 Swift replication (with some Python interoperability) for Sutton & Barto's book: [Reinforcement Learning: An Introduction (2nd Edition)](http://incompleteideas.net/book/the-book-2nd.html).
 
-Last tested with Swift 5.0 using the Swift for Tensorflow toolchain (`swift-tensorflow-RELEASE-0.3.1.xctoolchain`) and Python 3.7.
+Tested on macOS with Swift 5.0 using the Swift for Tensorflow toolchain (`swift-tensorflow-RELEASE-0.3.1.xctoolchain`) and Python 3.7.
 
-On macOS, to run the code for a given chapter, run the `compile_and_run.sh` script within the chapter folder.
+To run the code for a given chapter, run the `compile_and_run.sh` script within the chapter folder.
 
 # Contents
 

@@ -8,7 +8,6 @@
 
 import Foundation
 import Python
-PythonLibrary.useVersion(2)  // stuck with the System python for now. (i.e. /usr/bin/python -m pip)
 
 let plt = Python.import("matplotlib.pyplot")
 
