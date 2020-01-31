@@ -242,5 +242,85 @@ func make_figure_6_2() {
     plt.savefig("Fig_6.2.png")
 }
 
+func chooseActionFromQ(Q: [[Double]], S: Point, epsilon: Double, gridWorld: GridWorld) -> Action {
+    // select the action a that maximizes Q(S, a)
+    let SInt = gridWorld.gridToInt(S)
+    let maxQ = Q[SInt].max()
+    let maxQIndices = Q[SInt].indices.filter{ Q[SInt][$0] == maxQ }
+    let nonMaxQIndices = Q[SInt].indices.filter{ Q[SInt][$0] != maxQ }
+
+    // epsilon greedy
+    let d = Double.random(in: 0...1)
+    let chosenIndex = (d <= epsilon && !nonMaxQIndices.isEmpty) ? nonMaxQIndices.randomElement()! : maxQIndices.randomElement()!
+    return Action(rawValue: chosenIndex)!
+}
+
+func make_example_6_5(){
+    print("Generating Example 6.5")
+    let nX = 10
+    let nY = 7
+    let gridWorld = GridWorld(nX, nY)
+
+    var Q = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
+    let epsilon = 0.1
+    let alpha = 0.5
+    let terminalS = Point(7, 3)
+    let initialS = Point(0, 3)
+    var nStep = 0
+    var nCompletedEpisodes = 0
+    var episodeTracker = [Int]()
+    var S = initialS
+    while (nCompletedEpisodes < 200) {
+        var S = initialS
+        var A = chooseActionFromQ(Q: Q, S: S, epsilon: epsilon, gridWorld: gridWorld)
+
+        while (S != terminalS) {
+            let nextSAndR = gridWorld.move(S, A)
+            let nextS = nextSAndR.0
+            let R = nextSAndR.1
+
+            let nextA = chooseActionFromQ(Q: Q, S: nextS, epsilon: epsilon, gridWorld: gridWorld)
+            let currentQ = Q[gridWorld.gridToInt(S)][A.rawValue]
+            let nextQ = (nextS == terminalS) ? 0 : Q[gridWorld.gridToInt(nextS)][nextA.rawValue]
+            Q[gridWorld.gridToInt(S)][A.rawValue] += alpha * (Double(R) + nextQ - currentQ)
+
+            S = nextS
+            A = nextA
+            nStep += 1
+            episodeTracker.append(nCompletedEpisodes)
+        }
+        nCompletedEpisodes += 1
+    }
+
+    // show the policy derived from Q
+    var xTrajectory = [Int]()
+    var yTrajectory = [Int]()
+    S = initialS
+    xTrajectory.append(S.x)
+    yTrajectory.append(S.y)
+    while (S != terminalS) {
+        let A = chooseActionFromQ(Q: Q, S: S, epsilon: 0.0, gridWorld: gridWorld)
+        S = gridWorld.move(S, A).0
+        xTrajectory.append(S.x)
+        yTrajectory.append(S.y)
+    }
+
+    let fig = plt.figure(figsize: [6.4, 4.8])
+    let ax = fig.gca()
+    plt.plot(Array(0..<nStep), episodeTracker)
+    plt.xlabel("Time steps")
+    plt.ylabel("Episodes")
+    plt.title("Windy Gridworld")
+
+    let axins = ax.inset_axes([0.1, 0.5, 0.47, 0.47])
+    axins.plot(xTrajectory, yTrajectory)
+    axins.grid()
+    axins.text(0.05, 0.95, "N steps for final Q: \(xTrajectory.count-1)")
+    axins.set_xlim(0, nX)
+    axins.set_ylim(0, nY)
+    plt.savefig("Example_6.5.png")
+}
+
 make_example_6_2()
 make_figure_6_2()
+make_example_6_5()
