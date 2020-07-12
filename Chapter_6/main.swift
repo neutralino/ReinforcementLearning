@@ -247,12 +247,26 @@ func chooseActionFromQ(Q: [[Double]], S: Point, epsilon: Double, gridWorld: Grid
     let SInt = gridWorld.gridToInt(S)
     let maxQ = Q[SInt].max()
     let maxQIndices = Q[SInt].indices.filter{ Q[SInt][$0] == maxQ }
-    let nonMaxQIndices = Q[SInt].indices.filter{ Q[SInt][$0] != maxQ }
 
     // epsilon greedy
     let d = Double.random(in: 0...1)
-    let chosenIndex = (d <= epsilon && !nonMaxQIndices.isEmpty) ? nonMaxQIndices.randomElement()! : maxQIndices.randomElement()!
+    let chosenIndex = (d <= epsilon) ? Q[SInt].indices.randomElement()! : maxQIndices.randomElement()!
     return Action(rawValue: chosenIndex)!
+}
+
+func getGreedyTrajectory(initialS: Point, terminalS: Point, Q: [[Double]], gridWorld: GridWorld) -> ([Int], [Int]) {
+    var xTrajectory = [Int]()
+    var yTrajectory = [Int]()
+    var S = initialS
+    xTrajectory.append(S.x)
+    yTrajectory.append(S.y)
+    while (S != terminalS) {
+        let A = chooseActionFromQ(Q: Q, S: S, epsilon: 0.0, gridWorld: gridWorld)
+        S = gridWorld.move(S, A).0
+        xTrajectory.append(S.x)
+        yTrajectory.append(S.y)
+    }
+    return (xTrajectory, yTrajectory)
 }
 
 func make_example_6_5(){
@@ -269,7 +283,6 @@ func make_example_6_5(){
     var nStep = 0
     var nCompletedEpisodes = 0
     var episodeTracker = [Int]()
-    var S = initialS
     while (nCompletedEpisodes < 200) {
         var S = initialS
         var A = chooseActionFromQ(Q: Q, S: S, epsilon: epsilon, gridWorld: gridWorld)
@@ -292,19 +305,7 @@ func make_example_6_5(){
         nCompletedEpisodes += 1
     }
 
-    // show the policy derived from Q
-    var xTrajectory = [Int]()
-    var yTrajectory = [Int]()
-    S = initialS
-    xTrajectory.append(S.x)
-    yTrajectory.append(S.y)
-    while (S != terminalS) {
-        let A = chooseActionFromQ(Q: Q, S: S, epsilon: 0.0, gridWorld: gridWorld)
-        S = gridWorld.move(S, A).0
-        xTrajectory.append(S.x)
-        yTrajectory.append(S.y)
-    }
-
+    let (xTrajectory, yTrajectory) = getGreedyTrajectory(initialS: initialS, terminalS: terminalS, Q: Q, gridWorld: gridWorld)
     let fig = plt.figure(figsize: [6.4, 4.8])
     let ax = fig.gca()
     plt.plot(Array(0..<nStep), episodeTracker)
@@ -321,6 +322,133 @@ func make_example_6_5(){
     plt.savefig("Example_6.5.png")
 }
 
+func computeMean(allRewardsRuns: [[Int]]) -> [Double]{
+    let nRuns = allRewardsRuns.count
+    let nEpisodes = allRewardsRuns[0].count
+    var means = Array(repeating: 0.0, count: nEpisodes)
+
+    for iEpisode in 0..<nEpisodes {
+        for jRun in 0..<nRuns {
+            means[iEpisode] += Double(allRewardsRuns[jRun][iEpisode])
+        }
+        means[iEpisode] /= Double(nRuns)
+    }
+    return means
+}
+
+func make_example_6_6(){
+    print("Generating Example 6.6")
+
+    let nX = 12
+    let nY = 4
+    let cliffWorld = CliffWorld(nX, nY)
+
+    let nRuns = 1000
+    let maxEpisodes = 500
+
+    let epsilon = 0.1
+    let alpha = 0.5
+    let terminalS = Point(11, 0)
+    let initialS = Point(0, 0)
+    var S = initialS
+
+    var allSumRewards = [[Int]]()
+    var allSumRewards2 = [[Int]]()
+
+    var finalRunSarsaQ = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
+    var finalRunQLearningQ = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
+
+    for _ in 0..<nRuns {
+        // Q: Sarsa, Q2: Q-Learning
+        var Q = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
+        var Q2 = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
+
+        var nCompletedEpisodes = 0
+        var sumRewardTracker = [Int]()
+        var sumRewardTracker2 = [Int]()
+
+        // Sarsa
+        while (nCompletedEpisodes < maxEpisodes) {
+            var S = initialS
+            var A = chooseActionFromQ(Q: Q, S: S, epsilon: epsilon, gridWorld: cliffWorld)
+            var sumReward = 0
+            while (S != terminalS) {
+                let nextSAndR = cliffWorld.move(S, A)
+                let nextS = nextSAndR.0
+                let R = nextSAndR.1
+                sumReward += R
+
+                let nextA = chooseActionFromQ(Q: Q, S: nextS, epsilon: epsilon, gridWorld: cliffWorld)
+                let currentQ = Q[cliffWorld.gridToInt(S)][A.rawValue]
+                let nextQ = (nextS == terminalS) ? 0 : Q[cliffWorld.gridToInt(nextS)][nextA.rawValue]
+                Q[cliffWorld.gridToInt(S)][A.rawValue] += alpha * (Double(R) + nextQ - currentQ)
+
+                S = nextS
+                A = nextA
+            }
+            nCompletedEpisodes += 1
+            sumRewardTracker.append(sumReward)
+        }
+        allSumRewards.append(sumRewardTracker)
+
+        finalRunSarsaQ = Q
+
+        // Q-learning
+        nCompletedEpisodes = 0
+        while (nCompletedEpisodes < maxEpisodes) {
+            var S = initialS
+            var sumReward2 = 0
+            while (S != terminalS) {
+                let A = chooseActionFromQ(Q: Q2, S: S, epsilon: epsilon, gridWorld: cliffWorld)
+                let nextSAndR = cliffWorld.move(S, A)
+                let nextS = nextSAndR.0
+                let R = nextSAndR.1
+                sumReward2 += R
+
+                let currentQ = Q2[cliffWorld.gridToInt(S)][A.rawValue]
+                let nextQ = (nextS == terminalS) ? 0 : Q2[cliffWorld.gridToInt(nextS)].max()!
+                Q2[cliffWorld.gridToInt(S)][A.rawValue] += alpha * (Double(R) + nextQ - currentQ)
+
+                S = nextS
+            }
+            nCompletedEpisodes += 1
+            sumRewardTracker2.append(sumReward2)
+        }
+        allSumRewards2.append(sumRewardTracker2)
+
+        finalRunQLearningQ = Q2
+    }
+    let averageRewardsRuns = computeMean(allRewardsRuns: allSumRewards)
+    let averageRewardsRuns2 = computeMean(allRewardsRuns: allSumRewards2)
+
+    let fig = plt.figure(figsize: [6.4, 4.8])
+    let ax = fig.gca()
+    plt.plot(Array(0..<maxEpisodes), averageRewardsRuns, label: "Sarsa")
+    plt.plot(Array(0..<maxEpisodes), averageRewardsRuns2, label: "Q-learning")
+    plt.ylim([-150, 0])
+    plt.ylabel("(Average) sum of rewards during episode")
+    plt.xlabel("Episodes")
+    plt.title("Cliff Walking")
+    plt.legend()
+
+    let (xTrajectory, yTrajectory) = getGreedyTrajectory(initialS: initialS, terminalS: terminalS,
+                                                         Q: finalRunSarsaQ, gridWorld: cliffWorld)
+
+    let (xTrajectory2, yTrajectory2) = getGreedyTrajectory(initialS: initialS, terminalS: terminalS,
+                                                           Q: finalRunQLearningQ, gridWorld: cliffWorld)
+
+    let axins = ax.inset_axes([0.5, 0.1, 0.40, 0.40])
+    axins.plot(xTrajectory, yTrajectory)
+    axins.plot(xTrajectory2, yTrajectory2)
+    axins.grid()
+    axins.set_title("Sample final greedy policy")
+    axins.set_xlim(-1, nX)
+    axins.set_ylim(-1, nY)
+
+    plt.savefig("Example_6.6.png")
+}
+
 make_example_6_2()
 make_figure_6_2()
 make_example_6_5()
+make_example_6_6()

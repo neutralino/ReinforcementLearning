@@ -19,12 +19,12 @@ enum Action: Int {
     case west
 }
 
-struct GridWorld {
+class GridWorld {
     var nX: Int
     var nY: Int
 
     // Wind strength
-    let windStrength = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
+    var windStrength = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
 
     init(_ nX: Int, _ nY: Int) {
         self.nX = nX
@@ -68,6 +68,29 @@ struct GridWorld {
         nextP = keepOnGrid(nextP)
         if nextP == Point(7, 3) {
             return (nextP, 0)
+        }
+        return (nextP, -1)
+    }
+}
+
+class CliffWorld: GridWorld {
+    override func move(_ p: Point, _ action: Action) -> (Point, Int) {
+        var nextP: Point
+        switch action {
+        case .north:
+            nextP = Point(p.x, p.y+1)
+        case .south:
+            nextP = Point(p.x, p.y-1)
+        case .east:
+            nextP = Point(p.x+1, p.y)
+        case .west:
+            nextP = Point(p.x-1, p.y)
+        }
+        nextP = keepOnGrid(nextP)
+
+        // the cliff
+        if nextP.y == 0 && nextP.x > 0 && nextP.x < 11 {
+            return (Point(0, 0), -100)
         }
         return (nextP, -1)
     }
