@@ -323,13 +323,13 @@ func make_example_6_5() {
     lineGraph.plotTitle.title = "Windy Gridworld"
 
     var lineGraph2 = LineGraph<Double, Double>()
-    lineGraph2.addSeries(xTrajectory.map { Double($0) }, yTrajectory.map { Double($0) }, label: "")
+    // Bug in SwiftPlot's LineGraph preventing lineGraph2 from being plotted without scaling y values to be less than 2
+    lineGraph2.addSeries(xTrajectory.map { Double($0) }, yTrajectory.map { Double($0) / 10 }, label: "")
     lineGraph2.plotTitle.title = "N steps for final Q: \(xTrajectory.count-1)"
+    lineGraph2.plotLabel.xLabel = "Grid point"
+    lineGraph2.plotLabel.yLabel = "Grid point / 10"
 
-    // Bug in SwiftPlot's LineGraph preventing lineGraph2 from being plotted
-    // Disable for now
-    // subplot.plots = [lineGraph, lineGraph2]
-    subplot.plots = [lineGraph, lineGraph]
+    subplot.plots = [lineGraph, lineGraph2]
     try? subplot.drawGraphAndOutput(fileName: "Output/Chapter6/Example_6.5", renderer: aggRenderer)
 }
 
@@ -347,6 +347,83 @@ func computeMean(allRewardsRuns: [[Int]]) -> [Double] {
     return means
 }
 
+func runSarsa(cliffWorld: CliffWorld, alpha: Double, epsilon: Double, maxEpisodes: Int, initialS: Point, terminalS: Point) -> ([[Double]], [Int]) {
+    var Q = Array(repeating: Array(repeating: 0.0, count: 4), count: cliffWorld.nX * cliffWorld.nY)
+    var nCompletedEpisodes = 0
+    var sumRewardTracker = [Int]()
+
+    while nCompletedEpisodes < maxEpisodes {
+        var S = initialS
+        var A = chooseActionFromQ(Q: Q, S: S, epsilon: epsilon, gridWorld: cliffWorld)
+        var sumReward = 0
+        while S != terminalS {
+            let nextSAndR = cliffWorld.move(S, A)
+            let nextS = nextSAndR.0
+            let R = nextSAndR.1
+            sumReward += R
+
+            let nextA = chooseActionFromQ(Q: Q, S: nextS, epsilon: epsilon, gridWorld: cliffWorld)
+            let currentQ = Q[cliffWorld.gridToInt(S)][A.rawValue]
+            let nextQ = (nextS == terminalS) ? 0 : Q[cliffWorld.gridToInt(nextS)][nextA.rawValue]
+            Q[cliffWorld.gridToInt(S)][A.rawValue] += alpha * (Double(R) + nextQ - currentQ)
+
+            S = nextS
+            A = nextA
+        }
+        nCompletedEpisodes += 1
+        sumRewardTracker.append(sumReward)
+    }
+    return (Q, sumRewardTracker)
+}
+
+func runQLearning(cliffWorld: CliffWorld, alpha: Double, epsilon: Double, maxEpisodes: Int, initialS: Point, terminalS: Point, expectedSarsa: Bool = false) -> ([[Double]], [Int]) {
+    var Q = Array(repeating: Array(repeating: 0.0, count: 4), count: cliffWorld.nX * cliffWorld.nY)
+    var sumRewardTracker = [Int]()
+
+    var nCompletedEpisodes = 0
+    while nCompletedEpisodes < maxEpisodes {
+        var S = initialS
+        var sumReward = 0
+        while S != terminalS {
+            let A = chooseActionFromQ(Q: Q, S: S, epsilon: epsilon, gridWorld: cliffWorld)
+            let nextSAndR = cliffWorld.move(S, A)
+            let nextS = nextSAndR.0
+            let R = nextSAndR.1
+            sumReward += R
+
+            let currentQ = Q[cliffWorld.gridToInt(S)][A.rawValue]
+            var nextQ = 0.0
+
+            if nextS != terminalS {
+                let nextSInt = cliffWorld.gridToInt(nextS)
+                if expectedSarsa {
+                    let maxQ = Q[nextSInt].max()
+                    let maxQIndices = Q[nextSInt].indices.filter { Q[nextSInt][$0] == maxQ }
+
+                    for iAction in 0...3 {
+                        var actionProb = 0.0
+                        if maxQIndices.contains(iAction) {
+                            actionProb = (1.0 - epsilon) / Double(maxQIndices.count) + epsilon / 4.0
+                        } else {
+                            actionProb = epsilon / 4.0
+                        }
+                        nextQ += actionProb * Q[nextSInt][iAction]
+                    }
+                } else {
+                    nextQ = Q[nextSInt].max()!
+                }
+            }
+
+            Q[cliffWorld.gridToInt(S)][A.rawValue] += alpha * (Double(R) + nextQ - currentQ)
+
+            S = nextS
+        }
+        nCompletedEpisodes += 1
+        sumRewardTracker.append(sumReward)
+    }
+    return (Q, sumRewardTracker)
+}
+
 func make_example_6_6() {
     print("Generating Example 6.6")
 
@@ -362,81 +439,37 @@ func make_example_6_6() {
     let terminalS = Point(11, 0)
     let initialS = Point(0, 0)
 
-    var allSumRewards = [[Int]]()
-    var allSumRewards2 = [[Int]]()
+    var allSumRewardsSarsa = [[Int]]()
+    var allSumRewardsQLearning = [[Int]]()
 
     var finalRunSarsaQ = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
     var finalRunQLearningQ = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
 
     for _ in 0..<nRuns {
-        // Q: Sarsa, Q2: Q-Learning
-        var Q = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
-        var Q2 = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
 
-        var nCompletedEpisodes = 0
-        var sumRewardTracker = [Int]()
-        var sumRewardTracker2 = [Int]()
+        let sarsaQAndTracker = runSarsa(cliffWorld: cliffWorld, alpha: alpha,
+                                        epsilon: epsilon, maxEpisodes: maxEpisodes,
+                                        initialS: initialS, terminalS: terminalS)
+        finalRunSarsaQ = sarsaQAndTracker.0
+        allSumRewardsSarsa.append(sarsaQAndTracker.1)
 
-        // Sarsa
-        while nCompletedEpisodes < maxEpisodes {
-            var S = initialS
-            var A = chooseActionFromQ(Q: Q, S: S, epsilon: epsilon, gridWorld: cliffWorld)
-            var sumReward = 0
-            while S != terminalS {
-                let nextSAndR = cliffWorld.move(S, A)
-                let nextS = nextSAndR.0
-                let R = nextSAndR.1
-                sumReward += R
+        let qLearningQAndTracker = runQLearning(cliffWorld: cliffWorld,
+                                                alpha: alpha, epsilon: epsilon,
+                                                maxEpisodes: maxEpisodes,
+                                                initialS: initialS, terminalS: terminalS)
+        finalRunQLearningQ = qLearningQAndTracker.0
+        allSumRewardsQLearning.append(qLearningQAndTracker.1)
 
-                let nextA = chooseActionFromQ(Q: Q, S: nextS, epsilon: epsilon, gridWorld: cliffWorld)
-                let currentQ = Q[cliffWorld.gridToInt(S)][A.rawValue]
-                let nextQ = (nextS == terminalS) ? 0 : Q[cliffWorld.gridToInt(nextS)][nextA.rawValue]
-                Q[cliffWorld.gridToInt(S)][A.rawValue] += alpha * (Double(R) + nextQ - currentQ)
-
-                S = nextS
-                A = nextA
-            }
-            nCompletedEpisodes += 1
-            sumRewardTracker.append(sumReward)
-        }
-        allSumRewards.append(sumRewardTracker)
-
-        finalRunSarsaQ = Q
-
-        // Q-learning
-        nCompletedEpisodes = 0
-        while nCompletedEpisodes < maxEpisodes {
-            var S = initialS
-            var sumReward2 = 0
-            while S != terminalS {
-                let A = chooseActionFromQ(Q: Q2, S: S, epsilon: epsilon, gridWorld: cliffWorld)
-                let nextSAndR = cliffWorld.move(S, A)
-                let nextS = nextSAndR.0
-                let R = nextSAndR.1
-                sumReward2 += R
-
-                let currentQ = Q2[cliffWorld.gridToInt(S)][A.rawValue]
-                let nextQ = (nextS == terminalS) ? 0 : Q2[cliffWorld.gridToInt(nextS)].max()!
-                Q2[cliffWorld.gridToInt(S)][A.rawValue] += alpha * (Double(R) + nextQ - currentQ)
-
-                S = nextS
-            }
-            nCompletedEpisodes += 1
-            sumRewardTracker2.append(sumReward2)
-        }
-        allSumRewards2.append(sumRewardTracker2)
-
-        finalRunQLearningQ = Q2
     }
-    let averageRewardsRuns = computeMean(allRewardsRuns: allSumRewards)
-    let averageRewardsRuns2 = computeMean(allRewardsRuns: allSumRewards2)
+    let averageRewardsRunsSarsa = computeMean(allRewardsRuns: allSumRewardsSarsa)
+    let averageRewardsRunsQLearning = computeMean(allRewardsRuns: allSumRewardsQLearning)
 
     let aggRenderer: AGGRenderer = AGGRenderer()
     var subplot = SubPlot(layout: .grid(rows: 1, columns: 2))
     var lineGraph = LineGraph<Double, Double>()
 
-    lineGraph.addSeries(Array(0..<maxEpisodes).map { Double($0) }, averageRewardsRuns, label: "Sarsa", color: Color.blue)
-    lineGraph.addSeries(Array(0..<maxEpisodes).map { Double($0) }, averageRewardsRuns2, label: "Q-learning", color: Color.red)
+    lineGraph.addSeries(Array(0..<maxEpisodes).map { Double($0) }, averageRewardsRunsSarsa, label: "Sarsa", color: Color.blue)
+    lineGraph.addSeries(Array(0..<maxEpisodes).map { Double($0) }, averageRewardsRunsQLearning, label: "Q-learning", color: Color.red)
     lineGraph.plotLabel.xLabel = "(Average) sum of rewards during episode"
     lineGraph.plotLabel.yLabel = "Episodes"
     lineGraph.plotTitle.title = "Cliff Walking"
@@ -447,19 +480,142 @@ func make_example_6_6() {
     let (xTrajectory2, yTrajectory2) = getGreedyTrajectory(initialS: initialS, terminalS: terminalS,
                                                            Q: finalRunQLearningQ, gridWorld: cliffWorld)
 
-    var lineGraph2 = LineGraph<Double, Double>()
-    lineGraph2.addSeries(xTrajectory.map { Double($0) }, yTrajectory.map { Double($0) }, label: "Sarsa", color: Color.blue)
-    lineGraph2.addSeries(xTrajectory2.map { Double($0) }, yTrajectory2.map { Double($0) }, label: "Q-learning", color: Color.red)
+    var lineGraph2 = LineGraph<Double, Double>(enablePrimaryAxisGrid: true)
+    // Bug in SwiftPlot's LineGraph preventing lineGraph2 from being plotted without scaling y values to be less than 2
+    lineGraph2.addSeries(xTrajectory.map { Double($0) }, yTrajectory.map { Double($0) / 100 }, label: "Sarsa", color: Color.blue)
+    lineGraph2.addSeries(xTrajectory2.map { Double($0) }, yTrajectory2.map { Double($0) / 100 }, label: "Q-learning", color: Color.red)
+    lineGraph2.plotLabel.xLabel = "grid point"
+    lineGraph2.plotLabel.yLabel = "grid point / 100"
     lineGraph2.plotTitle.title = "Sample final greedy policy"
-
-    // Bug in SwiftPlot's LineGraph preventing lineGraph2 from being plotted
-    // Disable for now
-    // subplot.plots = [lineGraph, lineGraph2]
-    subplot.plots = [lineGraph, lineGraph]
+    subplot.plots = [lineGraph, lineGraph2]
     try? subplot.drawGraphAndOutput(fileName: "Output/Chapter6/Example_6.6", renderer: aggRenderer)
+}
+
+func make_figure_6_3() {
+    print("Generating Figure 6.3")
+
+    let nX = 12
+    let nY = 4
+    let cliffWorld = CliffWorld(nX, nY)
+
+    let alphas = stride(from: 0.1, to: 1.05, by: 0.05)
+    let epsilon = 0.1
+    let terminalS = Point(11, 0)
+    let initialS = Point(0, 0)
+
+    func computeAverageSumRewardsPerEpisode(sumRewardsInEpisode: [[Int]], numEpisodes: Int, numRuns: Int) -> Double {
+        let sumRewardsPerEpisode = sumRewardsInEpisode.map { Double($0.reduce(0, +)) / Double(numEpisodes) }
+        return Double(sumRewardsPerEpisode.reduce(0, +)) / Double(numRuns)
+    }
+
+    // interim performance
+    // var nRuns = 50000
+    var nRuns = 5000
+    var maxEpisodes = 100
+
+    var avgSumRewardsPerEpisodePerAlphaSarsa = [Double]()
+    var avgSumRewardsPerEpisodePerAlphaQLearning = [Double]()
+    var avgSumRewardsPerEpisodePerAlphaExpSarsa = [Double]()
+
+    for alpha in alphas {
+        print(alpha)
+        var allSumRewardsSarsa = [[Int]]()
+        var allSumRewardsQLearning = [[Int]]()
+        var allSumRewardsExpSarsa = [[Int]]()
+
+        for _ in 0..<nRuns {
+            let sarsaQAndTracker = runSarsa(cliffWorld: cliffWorld, alpha: alpha,
+                                            epsilon: epsilon, maxEpisodes: maxEpisodes,
+                                            initialS: initialS, terminalS: terminalS)
+            allSumRewardsSarsa.append(sarsaQAndTracker.1)
+
+            let qLearningQAndTracker = runQLearning(cliffWorld: cliffWorld,
+                                                    alpha: alpha, epsilon: epsilon,
+                                                    maxEpisodes: maxEpisodes,
+                                                    initialS: initialS, terminalS: terminalS)
+            allSumRewardsQLearning.append(qLearningQAndTracker.1)
+
+            let expSarsaQAndTracker = runQLearning(cliffWorld: cliffWorld,
+                                                    alpha: alpha, epsilon: epsilon,
+                                                    maxEpisodes: maxEpisodes,
+                                                    initialS: initialS, terminalS: terminalS, expectedSarsa: true)
+            allSumRewardsExpSarsa.append(expSarsaQAndTracker.1)
+
+        }
+
+        let avgSumRewardsPerEpisodeSarsa = computeAverageSumRewardsPerEpisode(sumRewardsInEpisode: allSumRewardsSarsa, numEpisodes: maxEpisodes, numRuns: nRuns)
+        avgSumRewardsPerEpisodePerAlphaSarsa.append(avgSumRewardsPerEpisodeSarsa)
+
+        let avgSumRewardsPerEpisodeQLearning = computeAverageSumRewardsPerEpisode(sumRewardsInEpisode: allSumRewardsQLearning, numEpisodes: maxEpisodes, numRuns: nRuns)
+        avgSumRewardsPerEpisodePerAlphaQLearning.append(avgSumRewardsPerEpisodeQLearning)
+
+        let avgSumRewardsPerEpisodeExpSarsa = computeAverageSumRewardsPerEpisode(sumRewardsInEpisode: allSumRewardsExpSarsa, numEpisodes: maxEpisodes, numRuns: nRuns)
+        avgSumRewardsPerEpisodePerAlphaExpSarsa.append(avgSumRewardsPerEpisodeExpSarsa)
+    }
+
+    let aggRenderer: AGGRenderer = AGGRenderer()
+    var lineGraph = LineGraph<Double, Double>()
+    lineGraph.addSeries(alphas.map { Double($0) }, avgSumRewardsPerEpisodePerAlphaSarsa.map { $0 / 1000.0 }, label: "Sarsa (Interim)", color: Color.blue)
+    lineGraph.addSeries(alphas.map { Double($0) }, avgSumRewardsPerEpisodePerAlphaQLearning.map { $0 / 1000.0 }, label: "Q-learning (Interim)", color: Color.gray)
+    lineGraph.addSeries(alphas.map { Double($0) }, avgSumRewardsPerEpisodePerAlphaExpSarsa.map { $0 / 1000.0 }, label: "Expected (Interim)", color: Color.red)
+
+    // asymptotic performance
+    nRuns = 10
+    maxEpisodes = 100000
+
+    avgSumRewardsPerEpisodePerAlphaSarsa = [Double]()
+    avgSumRewardsPerEpisodePerAlphaQLearning = [Double]()
+    avgSumRewardsPerEpisodePerAlphaExpSarsa = [Double]()
+
+    for alpha in alphas {
+        print(alpha)
+        var allSumRewardsSarsa = [[Int]]()
+        var allSumRewardsQLearning = [[Int]]()
+        var allSumRewardsExpSarsa = [[Int]]()
+
+        for _ in 0..<nRuns {
+            let sarsaQAndTracker = runSarsa(cliffWorld: cliffWorld, alpha: alpha,
+                                            epsilon: epsilon, maxEpisodes: maxEpisodes,
+                                            initialS: initialS, terminalS: terminalS)
+            allSumRewardsSarsa.append(sarsaQAndTracker.1)
+
+            let qLearningQAndTracker = runQLearning(cliffWorld: cliffWorld,
+                                                    alpha: alpha, epsilon: epsilon,
+                                                    maxEpisodes: maxEpisodes,
+                                                    initialS: initialS, terminalS: terminalS)
+            allSumRewardsQLearning.append(qLearningQAndTracker.1)
+
+            let expSarsaQAndTracker = runQLearning(cliffWorld: cliffWorld,
+                                                    alpha: alpha, epsilon: epsilon,
+                                                    maxEpisodes: maxEpisodes,
+                                                    initialS: initialS, terminalS: terminalS, expectedSarsa: true)
+            allSumRewardsExpSarsa.append(expSarsaQAndTracker.1)
+
+        }
+
+        let avgSumRewardsPerEpisodeSarsa = computeAverageSumRewardsPerEpisode(sumRewardsInEpisode: allSumRewardsSarsa, numEpisodes: maxEpisodes, numRuns: nRuns)
+        avgSumRewardsPerEpisodePerAlphaSarsa.append(avgSumRewardsPerEpisodeSarsa)
+
+        let avgSumRewardsPerEpisodeQLearning = computeAverageSumRewardsPerEpisode(sumRewardsInEpisode: allSumRewardsQLearning, numEpisodes: maxEpisodes, numRuns: nRuns)
+        avgSumRewardsPerEpisodePerAlphaQLearning.append(avgSumRewardsPerEpisodeQLearning)
+
+        let avgSumRewardsPerEpisodeExpSarsa = computeAverageSumRewardsPerEpisode(sumRewardsInEpisode: allSumRewardsExpSarsa, numEpisodes: maxEpisodes, numRuns: nRuns)
+        avgSumRewardsPerEpisodePerAlphaExpSarsa.append(avgSumRewardsPerEpisodeExpSarsa)
+    }
+
+    // Bug in SwiftPlot's LineGraph preventing lineGraph from being plotted without scaling y values to be less than 2
+    lineGraph.addSeries(alphas.map { Double($0) }, avgSumRewardsPerEpisodePerAlphaSarsa.map { $0 / 1000.0 }, label: "Sarsa (Asymptotic)", color: Color.darkBlue)
+    lineGraph.addSeries(alphas.map { Double($0) }, avgSumRewardsPerEpisodePerAlphaQLearning.map { $0 / 1000.0 }, label: "Q-learning (Asymptotic)", color: Color.darkGray)
+    lineGraph.addSeries(alphas.map { Double($0) }, avgSumRewardsPerEpisodePerAlphaExpSarsa.map { $0 / 1000.0 }, label: "Expected (Asymptotic)", color: Color.darkRed)
+
+    lineGraph.plotLabel.xLabel = "alpha"
+    lineGraph.plotLabel.yLabel = "Average sum of rewards per episode / 1000"
+    lineGraph.plotTitle.title = "Cliff Walking"
+    try? lineGraph.drawGraphAndOutput(fileName: "Output/Chapter6/Fig_6.3", renderer: aggRenderer)
 }
 
 make_example_6_2()
 make_figure_6_2()
 make_example_6_5()
 make_example_6_6()
+make_figure_6_3()
