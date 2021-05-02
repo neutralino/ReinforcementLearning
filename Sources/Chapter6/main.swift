@@ -249,15 +249,20 @@ func make_figure_6_2() {
     try? lineGraph.drawGraphAndOutput(fileName: "Output/Chapter6/Fig_6.2", renderer: aggRenderer)
 }
 
-func chooseActionFromQ(Q: [[Double]], S: Point, epsilon: Double, gridWorld: GridWorld) -> Action {
-    // select the action a that maximizes Q(S, a)
-    let SInt = gridWorld.gridToInt(S)
-    let maxQ = Q[SInt].max()
-    let maxQIndices = Q[SInt].indices.filter { Q[SInt][$0] == maxQ }
+func getEpsilonGreedyAction(Q: [Double], epsilon: Double) -> Int {
+    let maxQ = Q.max()
+    let maxQIndices = Q.indices.filter { Q[$0] == maxQ }
 
     // epsilon greedy
     let d = Double.random(in: 0...1)
-    let chosenIndex = (d <= epsilon) ? Q[SInt].indices.randomElement()! : maxQIndices.randomElement()!
+    let chosenIndex = (d <= epsilon) ? Q.indices.randomElement()! : maxQIndices.randomElement()!
+    return chosenIndex
+}
+
+func chooseActionFromQ(Q: [[Double]], S: Point, epsilon: Double, gridWorld: GridWorld) -> Action {
+    // select the action a that maximizes Q(S, a)
+    let SInt = gridWorld.gridToInt(S)
+    let chosenIndex = getEpsilonGreedyAction(Q: Q[SInt], epsilon: epsilon)
     return Action(rawValue: chosenIndex)!
 }
 
@@ -446,7 +451,6 @@ func make_example_6_6() {
     var finalRunQLearningQ = Array(repeating: Array(repeating: 0.0, count: 4), count: nX * nY)
 
     for _ in 0..<nRuns {
-
         let sarsaQAndTracker = runSarsa(cliffWorld: cliffWorld, alpha: alpha,
                                         epsilon: epsilon, maxEpisodes: maxEpisodes,
                                         initialS: initialS, terminalS: terminalS)
@@ -459,8 +463,8 @@ func make_example_6_6() {
                                                 initialS: initialS, terminalS: terminalS)
         finalRunQLearningQ = qLearningQAndTracker.0
         allSumRewardsQLearning.append(qLearningQAndTracker.1)
-
     }
+
     let averageRewardsRunsSarsa = computeMean(allRewardsRuns: allSumRewardsSarsa)
     let averageRewardsRunsQLearning = computeMean(allRewardsRuns: allSumRewardsQLearning)
 
@@ -614,8 +618,129 @@ func make_figure_6_3() {
     try? lineGraph.drawGraphAndOutput(fileName: "Output/Chapter6/Fig_6.3", renderer: aggRenderer)
 }
 
+func make_figure_6_5() {
+    print("Generating Figure 6.5")
+
+    let numBActions = 10
+    let smallMDP = SmallMDP()
+    let epsilon = 0.1
+    let alpha = 0.1
+
+    let nRuns = 10000
+    let maxEpisodes = 300
+
+    var nLeftActions = Array(repeating: 0, count: maxEpisodes)
+    var nLeftActionsDoubleQ = Array(repeating: 0, count: maxEpisodes)
+
+    do {
+        for _ in 0..<nRuns {
+            let QTerminal = 0.0
+
+            // Q-learning
+            var QA = Array(repeating: 0.0, count: 2)
+            var QB = Array(repeating: 0.0, count: numBActions)
+
+            // Double Q-learning
+            var Q1A = Array(repeating: 0.0, count: 2)
+            var Q1B = Array(repeating: 0.0, count: numBActions)
+            var Q2A = Array(repeating: 0.0, count: 2)
+            var Q2B = Array(repeating: 0.0, count: numBActions)
+
+            var nCompletedEpisodes = 0
+            while nCompletedEpisodes < maxEpisodes {
+
+                // Q-learning
+                var actionIndexA = getEpsilonGreedyAction(Q: QA, epsilon: epsilon)
+                nLeftActions[nCompletedEpisodes] += (1-actionIndexA)
+
+                var nextSAndR = try smallMDP.move(SmallMDPState.a, actionIndexA)
+                var nextS = nextSAndR.0
+                var R = nextSAndR.1
+
+                var currentQ = QA[actionIndexA]
+                var nextQ = (nextS == SmallMDPState.terminal) ? QTerminal : QB.max()!
+                QA[actionIndexA] += alpha * (Double(R) + nextQ - currentQ)
+
+                if nextS == SmallMDPState.b {
+                    let actionIndexB = getEpsilonGreedyAction(Q: QB, epsilon: epsilon)
+                    nextSAndR = try smallMDP.move(SmallMDPState.b, actionIndexB)
+                    nextS = nextSAndR.0
+                    R = nextSAndR.1
+                    currentQ = QB[actionIndexB]
+                    nextQ = QTerminal
+                    QB[actionIndexB] += alpha * (Double(R) + nextQ - currentQ)
+                }
+
+                // Double Q-learning
+                actionIndexA = getEpsilonGreedyAction(Q: zip(Q1A, Q2A).map(+),  epsilon: epsilon)
+                nLeftActionsDoubleQ[nCompletedEpisodes] += (1-actionIndexA)
+
+                nextSAndR = try smallMDP.move(SmallMDPState.a, actionIndexA)
+                nextS = nextSAndR.0
+                R = nextSAndR.1
+
+                var d = Double.random(in: 0...1)
+                if d <= 0.5 {
+                    currentQ = Q1A[actionIndexA]
+
+                    // get action index that maximizes Q2B
+                    let maxQ = Q1B.max()
+                    let maxQ1Indices = Q1B.indices.filter { Q1B[$0] == maxQ }
+
+                    nextQ = (nextS == SmallMDPState.terminal) ? QTerminal : Q2B[maxQ1Indices.randomElement()!]
+                    Q1A[actionIndexA] += alpha * (Double(R) + nextQ - currentQ)
+                } else {
+                    currentQ = Q2A[actionIndexA]
+
+                    let maxQ = Q2B.max()
+                    let maxQ2Indices = Q2B.indices.filter { Q2B[$0] == maxQ }
+
+                    nextQ = (nextS == SmallMDPState.terminal) ? QTerminal : Q1B[maxQ2Indices.randomElement()!]
+                    Q2A[actionIndexA] += alpha * (Double(R) + nextQ - currentQ)
+                }
+
+                if nextS == SmallMDPState.b {
+                    let actionIndexB = getEpsilonGreedyAction(Q: zip(Q1B, Q2B).map(+), epsilon: epsilon)
+                    nextSAndR = try smallMDP.move(SmallMDPState.b, actionIndexB)
+                    nextS = nextSAndR.0
+                    R = nextSAndR.1
+
+                    d = Double.random(in: 0...1)
+                    if d <= 0.5 {
+                        currentQ = Q1B[actionIndexB]
+                        nextQ = QTerminal
+                        Q1B[actionIndexB] += alpha * (Double(R) + nextQ - currentQ)
+                    } else {
+                        currentQ = Q2B[actionIndexB]
+                        nextQ = QTerminal
+                        Q2B[actionIndexB] += alpha * (Double(R) + nextQ - currentQ)
+                    }
+
+                }
+
+                nCompletedEpisodes += 1
+            }
+        }
+    } catch {
+      print("Invalid action reached!")
+    }
+    let percentLeftActions = nLeftActions.map { Double($0) / Double(nRuns) }
+    let percentLeftActionsDoubleQ = nLeftActionsDoubleQ.map { Double($0) / Double(nRuns) }
+
+    let aggRenderer: AGGRenderer = AGGRenderer()
+    var lineGraph = LineGraph<Double, Double>()
+    lineGraph.addSeries(Array(stride(from: 0.0, through: Double(maxEpisodes)-1, by: 1.0)), percentLeftActions, label: "Q-learning", color: Color.red)
+    lineGraph.addSeries(Array(stride(from: 0.0, through: Double(maxEpisodes)-1, by: 1.0)), percentLeftActionsDoubleQ, label: "Double Q-learning", color: Color.green)
+    lineGraph.addSeries(Array(stride(from: 0.0, through: Double(maxEpisodes)-1, by: 1.0)), Array(repeating: 0.05, count: maxEpisodes), label: "epsilon=0.1 minimum", color: Color.black)
+    lineGraph.plotLabel.xLabel = "Episodes"
+    lineGraph.plotLabel.yLabel = "% lef actions from A"
+    lineGraph.plotTitle.title = "Simple MDP"
+    try? lineGraph.drawGraphAndOutput(fileName: "Output/Chapter6/Fig_6.5", renderer: aggRenderer)
+}
+
 make_example_6_2()
 make_figure_6_2()
 make_example_6_5()
 make_example_6_6()
 make_figure_6_3()
+make_figure_6_5()

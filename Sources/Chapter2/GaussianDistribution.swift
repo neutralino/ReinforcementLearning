@@ -3,7 +3,6 @@
 //  Copied from https://stackoverflow.com/questions/49470358/how-can-i-return-a-float-or-double-from-normal-distribution-in-swift-4
 // (Doesn't look GameplayKit's GKGaussianDistribution can generate floats)
 
-//import Foundation
 import GameplayKit
 
 class GaussianDistribution {

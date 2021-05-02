@@ -16,4 +16,4 @@ To run the code for a given chapter, execute `swift run Chapter<N>`.
 | 3: Finite Markov Decision Processes | [3.2](Output/Chapter3/Fig_3.2.png), [3.5](Output/Chapter3/Fig_3.5.png) |
 | 4: Dynamic Programming | [4.1](Output/Chapter4/Fig_4.1.png), [4.2](Output/Chapter4/Fig_4.2.png), [4.3](Output/Chapter4/Fig_4.3.png) |
 | 5: Monte Carlo Methods | [5.1](Output/Chapter5/Fig_5.1.png), [5.2](Output/Chapter5/Fig_5.2.png), [5.3](Output/Chapter5/Fig_5.3.png), [5.4](Output/Chapter5/Fig_5.4.png) |
-| 6: Temporal-Difference Learning | [Ex 6.2](Output/Chapter6/Example_6.2.png), [6.2](Output/Chapter6/Fig_6.2.png), [Ex 6.5](Output/Chapter6/Example_6.5.png), [Ex 6.6](Output/Chapter6/Example_6.6.png), [6.3](Output/Chapter6/Fig_6.3.png) |
+| 6: Temporal-Difference Learning | [Ex 6.2](Output/Chapter6/Example_6.2.png), [6.2](Output/Chapter6/Fig_6.2.png), [Ex 6.5](Output/Chapter6/Example_6.5.png), [Ex 6.6](Output/Chapter6/Example_6.6.png), [6.3](Output/Chapter6/Fig_6.3.png), [6.5](Output/Chapter6/Fig_6.5.png) |

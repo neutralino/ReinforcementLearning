@@ -49,7 +49,7 @@ let package = Package(
       name: "Chapter6",
       dependencies: [
         "SwiftPlot",
-       .product(name:"AGGRenderer", package: "SwiftPlot")],
+        .product(name:"AGGRenderer", package: "SwiftPlot")],
       exclude: ["Output"]),
     .testTarget(
       name: "ReinforcementLearningTests",
